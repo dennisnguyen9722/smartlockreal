@@ -19,6 +19,7 @@ export class HealthController {
       database: 'up',
       databaseLatencyMs: Date.now() - startedAt,
       time: new Date().toISOString(),
+      service: 'api'
     };
   }
 }
