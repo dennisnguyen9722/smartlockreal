@@ -8,7 +8,7 @@ async function bootstrap() {
   // Kiểm tra biến môi trường TRƯỚC khi tạo ứng dụng
   const env = loadEnv();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule.register(env));
   app.setGlobalPrefix('api/v1');
   app.enableShutdownHooks();
 
