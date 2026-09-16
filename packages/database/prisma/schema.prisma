@@ -1,10 +1,45 @@
-// Prisma ORM 7. Các bảng sẽ được thiết kế ở Bước 3.
+// Prisma ORM 7. Quy ước đặt tên:
+// - Trong code: PascalCase (model), camelCase (field)
+// - Trong PostgreSQL: snake_case, dùng @@map và @map
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = "js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// Giá trị enum phải khớp với LocationType và Region trong @ktm/shared
+enum LocationType {
+  WAREHOUSE
+  STORE
+
+  @@map("location_type")
+}
+
+enum Region {
+  HCM
+  HN
+
+  @@map("region")
+}
+
+/// Điểm tồn kho: kho tổng TP.HCM và các cửa hàng
+model Location {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  code      String       @unique @db.VarChar(32)
+  name      String       @db.VarChar(255)
+  type      LocationType
+  region    Region
+  address   String
+  phone     String?      @db.VarChar(20)
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("locations")
 }
