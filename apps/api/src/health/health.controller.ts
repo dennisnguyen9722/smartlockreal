@@ -1,5 +1,7 @@
-import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Inject } from '@nestjs/common';
 import type { PrismaClient } from '@ktm/database';
+import { ErrorCode } from '@ktm/shared';
+import { AppException } from '../common/errors/app.exception';
 import { PRISMA } from '../database/database.module';
 
 @Controller('health')
@@ -12,7 +14,9 @@ export class HealthController {
     try {
       await this.db.$queryRaw`SELECT 1`;
     } catch {
-      throw new ServiceUnavailableException({ status: 'error', database: 'down' });
+      throw new AppException(ErrorCode.SERVICE_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE, {
+        database: 'down',
+      });
     }
     return {
       status: 'ok',

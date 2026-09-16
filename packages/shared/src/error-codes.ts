@@ -8,6 +8,7 @@ export const ErrorCode = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   NOT_FOUND: 'NOT_FOUND',
   RATE_LIMITED: 'RATE_LIMITED',
+  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
 
   // Xác thực và phân quyền
   UNAUTHENTICATED: 'UNAUTHENTICATED',
@@ -46,4 +47,5 @@ export const ErrorMessageVi: Record<ErrorCode, string> = {
   PRICE_CHANGED: 'Giá sản phẩm vừa thay đổi, vui lòng kiểm tra lại giỏ hàng.',
   QUOTE_EXPIRED: 'Báo giá đã hết hiệu lực.',
   MISA_SKU_NOT_MAPPED: 'Sản phẩm chưa được ánh xạ mã hàng MISA.',
+  SERVICE_UNAVAILABLE: 'Hệ thống đang bảo trì hoặc quá tải, vui lòng thử lại sau.',
 };
