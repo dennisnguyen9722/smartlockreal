@@ -7,6 +7,9 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
 import { AppIoAdapter } from './realtime/app-io.adapter';
+import { createAdapter } from '@socket.io/redis-adapter';
+import type { Redis } from 'ioredis';
+import { REDIS, REDIS_SUBSCRIBER } from './redis/redis.module';
 
 async function bootstrap() {
   const env = loadEnv();
@@ -26,7 +29,8 @@ async function bootstrap() {
     exposedHeaders: ['x-request-id'],
   });
 
-  app.useWebSocketAdapter(new AppIoAdapter(app, env.CORS_ORIGINS));
+  const redisAdapter = createAdapter(app.get<Redis>(REDIS), app.get<Redis>(REDIS_SUBSCRIBER));
+  app.useWebSocketAdapter(new AppIoAdapter(app, env.CORS_ORIGINS, redisAdapter));
 
   await app.listen(env.API_PORT);
   Logger.log(`API đang chạy tại http://localhost:${env.API_PORT}/api/v1`, 'Bootstrap');

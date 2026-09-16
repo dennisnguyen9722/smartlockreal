@@ -1,17 +1,21 @@
 import type { INestApplicationContext } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import type { createAdapter } from '@socket.io/redis-adapter';
 import type { Server } from 'socket.io';
 
 type IoServerOptions = Parameters<IoAdapter['createIOServer']>[1];
+type AdapterFactory = ReturnType<typeof createAdapter>;
 
 /**
- * Adapter Socket.IO của dự án.
- * CORS của HTTP (app.enableCors) KHÔNG áp dụng cho Socket.IO, nên phải cấu hình riêng ở đây.
+ * Adapter Socket.IO của dự án:
+ * - CORS riêng cho Socket.IO (app.enableCors không áp dụng ở đây)
+ * - Redis adapter để thông báo đi được giữa nhiều instance API
  */
 export class AppIoAdapter extends IoAdapter {
   constructor(
     app: INestApplicationContext,
     private readonly corsOrigins: string[],
+    private readonly adapterFactory: AdapterFactory,
   ) {
     super(app);
   }
@@ -24,6 +28,8 @@ export class AppIoAdapter extends IoAdapter {
       cors: { origin: this.corsOrigins, credentials: true },
     } as NonNullable<IoServerOptions>;
 
-    return super.createIOServer(port, withCors) as Server;
+    const server = super.createIOServer(port, withCors) as Server;
+    server.adapter(this.adapterFactory);
+    return server;
   }
 }

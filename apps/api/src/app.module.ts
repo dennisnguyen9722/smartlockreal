@@ -6,13 +6,14 @@ import { HealthController } from './health/health.controller';
 import { APP_FILTER } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RealtimeModule } from './realtime/realtime.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({})
 export class AppModule {
   static register(env: Env): DynamicModule {
     return {
       module: AppModule,
-      imports: [ConfigModule.forRoot(env), DatabaseModule, RealtimeModule],
+      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, RealtimeModule],
       controllers: [HealthController],
       providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
     };
