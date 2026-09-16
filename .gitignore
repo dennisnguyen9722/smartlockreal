@@ -1,0 +1,17 @@
+# Thư viện
+node_modules
+
+# File build
+dist
+.next
+.turbo
+*.tsbuildinfo
+
+# Biến môi trường (chứa mật khẩu, secret)
+.env
+.env.*
+!.env.example
+
+# Log và file rác của hệ thống
+*.log
+.DS_Store
