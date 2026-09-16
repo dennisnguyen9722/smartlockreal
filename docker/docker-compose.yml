@@ -1,0 +1,41 @@
+# Hạ tầng cho môi trường phát triển (KHÔNG dùng cho production)
+name: ktm
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: ktm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ktm
+      POSTGRES_PASSWORD: ktm_dev_password
+      POSTGRES_DB: khoathongminh
+      TZ: UTC
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ktm -d khoathongminh" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ktm-redis
+    restart: unless-stopped
+    command: [ "redis-server", "--appendonly", "yes" ]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
