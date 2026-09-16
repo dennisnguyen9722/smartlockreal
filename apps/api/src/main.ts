@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { loadEnv } from './config/env';
+import { AppIoAdapter } from './realtime/app-io.adapter';
 
 async function bootstrap() {
   const env = loadEnv();
@@ -24,6 +25,8 @@ async function bootstrap() {
     credentials: true,
     exposedHeaders: ['x-request-id'],
   });
+
+  app.useWebSocketAdapter(new AppIoAdapter(app, env.CORS_ORIGINS));
 
   await app.listen(env.API_PORT);
   Logger.log(`API đang chạy tại http://localhost:${env.API_PORT}/api/v1`, 'Bootstrap');

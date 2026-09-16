@@ -32,5 +32,6 @@ export const RealtimeEvent = {
   QUOTE_REQUESTED: 'quote:requested',
   STOCK_LOW: 'stock:low',
   INSTALL_JOB_ASSIGNED: 'install:job-assigned',
+  SYSTEM_PING: 'system:ping',
 } as const;
 export type RealtimeEvent = (typeof RealtimeEvent)[keyof typeof RealtimeEvent];
