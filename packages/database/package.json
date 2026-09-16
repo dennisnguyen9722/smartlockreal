@@ -1,0 +1,22 @@
+{
+  "name": "@ktm/database",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "db:validate": "prisma validate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "prisma": "~7.10.0",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "~7.10.0",
+    "@prisma/client": "~7.10.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.23.0"
+  }
+}

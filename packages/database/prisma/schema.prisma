@@ -1,0 +1,10 @@
+// Prisma ORM 7. Các bảng sẽ được thiết kế ở Bước 3.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

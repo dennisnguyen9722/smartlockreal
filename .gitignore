@@ -15,3 +15,5 @@ dist
 # Log và file rác của hệ thống
 *.log
 .DS_Store
+# Code do Prisma sinh ra (tạo lại bằng db:generate)
+packages/database/src/generated
