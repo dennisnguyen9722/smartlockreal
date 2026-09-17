@@ -41,6 +41,13 @@ model Location {
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  stockLevels   StockLevel[]
+  serialUnits   SerialUnit[]
+  goodsReceipts GoodsReceipt[]
+  transfersOut  StockTransfer[] @relation("TransferFrom")
+  transfersIn   StockTransfer[] @relation("TransferTo")
+  stocktakes    Stocktake[]
+
   @@map("locations")
 }
 
@@ -286,6 +293,12 @@ model ProductVariant {
   bundleItems   BundleItem[]         @relation("BundleParent")
   usedInBundles BundleItem[]         @relation("BundleComponent")
 
+  stockLevels    StockLevel[]
+  serialUnits    SerialUnit[]
+  receiptLines   GoodsReceiptLine[]
+  transferLines  StockTransferLine[]
+  stocktakeLines StocktakeLine[]
+
   @@unique([productId, optionKey])
   @@map("product_variants")
 }
@@ -348,4 +361,297 @@ model ProductRelation {
   @@id([productId, relatedProductId, type])
   @@index([relatedProductId])
   @@map("product_relations")
+}
+
+// ============================================================
+// NHÓM 3.2: TỒN KHO
+// on_hand chỉ gồm hàng MỚI bán được; hàng trưng bày và hàng lỗi không tính.
+// Mọi thay đổi on_hand phải ghi stock_movements trong CÙNG transaction.
+// CHECK và trigger viết tay nằm trong migration *_inventory.
+// stock_movements có trigger chặn UPDATE/DELETE/TRUNCATE: sửa sai bằng cách ghi thêm dòng ADJUSTMENT.
+// ============================================================
+
+enum SerialUnitStatus {
+  IN_STOCK
+  DISPLAY
+  IN_TRANSIT
+  SOLD
+  DEFECTIVE
+  AT_VENDOR
+  SCRAPPED
+
+  @@map("serial_unit_status")
+}
+
+enum ReservationSource {
+  /// Giữ tạm trong lúc thanh toán online, có hạn
+  ONLINE_CHECKOUT
+  /// Giữ theo đơn (COD, chuyển khoản, đặt cọc showroom), không hạn
+  ORDER
+
+  @@map("reservation_source")
+}
+
+enum ReservationStatus {
+  ACTIVE
+  CONSUMED
+  RELEASED
+  EXPIRED
+
+  @@map("reservation_status")
+}
+
+enum StockMovementType {
+  RECEIPT
+  SALE
+  SALE_RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT
+  TO_DISPLAY
+  FROM_DISPLAY
+  DISPLAY_SALE
+  MARK_DEFECTIVE
+  SEND_TO_VENDOR
+  RECEIVE_FROM_VENDOR
+  SCRAP
+
+  @@map("stock_movement_type")
+}
+
+enum DocumentStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+
+  @@map("document_status")
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+
+  @@map("transfer_status")
+}
+
+/// Tồn kho hàng mới theo (biến thể, showroom). Bán được = on_hand - reserved.
+model StockLevel {
+  variantId  String   @map("variant_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  onHand     Int      @default(0) @map("on_hand")
+  reserved   Int      @default(0)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  variant      ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location     Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  reservations StockReservation[]
+  movements    StockMovement[]
+
+  @@id([variantId, locationId])
+  @@index([locationId])
+  @@map("stock_levels")
+}
+
+/// Từng chiếc có serial
+model SerialUnit {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  variantId     String           @map("variant_id") @db.Uuid
+  /// Viết hoa, không khoảng trắng đầu/cuối
+  serialNumber  String           @map("serial_number") @db.VarChar(100)
+  status        SerialUnitStatus @default(IN_STOCK)
+  /// Null khi chiếc không nằm ở showroom nào (đã bán, đang chuyển, ở hãng...)
+  locationId    String?          @map("location_id") @db.Uuid
+  /// Giá bán hàng trưng bày (VND)
+  displayPrice  BigInt?          @map("display_price")
+  /// Đang rao bán hàng trưng bày trên website
+  isListed      Boolean          @default(false) @map("is_listed")
+  conditionNote String?          @map("condition_note")
+  /// Ảnh thực tế của máy trưng bày: ["url1", "url2"]
+  displayPhotos Json             @default("[]") @map("display_photos")
+  receivedAt    DateTime         @default(now()) @map("received_at") @db.Timestamptz(3)
+  soldAt        DateTime?        @map("sold_at") @db.Timestamptz(3)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  variant   ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location  Location?       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  movements StockMovement[]
+
+  @@unique([variantId, serialNumber])
+  @@index([serialNumber])
+  @@index([locationId, status])
+  @@map("serial_units")
+}
+
+/// Lượt giữ hàng
+model StockReservation {
+  id         String            @id @default(uuid(7)) @db.Uuid
+  variantId  String            @map("variant_id") @db.Uuid
+  locationId String            @map("location_id") @db.Uuid
+  quantity   Int
+  source     ReservationSource
+  status     ReservationStatus @default(ACTIVE)
+  /// FK tới đơn hàng, sẽ thêm ở nhóm 3.5
+  orderId    String?           @map("order_id") @db.Uuid
+  /// Bắt buộc với ONLINE_CHECKOUT, null với ORDER
+  expiresAt  DateTime?         @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  stockLevel StockLevel @relation(fields: [variantId, locationId], references: [variantId, locationId], onDelete: Restrict)
+
+  @@index([variantId, locationId])
+  @@index([orderId])
+  @@map("stock_reservations")
+}
+
+/// Sổ kho bất biến: KHÔNG sửa, KHÔNG xóa (có trigger chặn)
+model StockMovement {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  variantId     String            @map("variant_id") @db.Uuid
+  locationId    String            @map("location_id") @db.Uuid
+  type          StockMovementType
+  /// Thay đổi on_hand (+/-). Bằng 0 khi chỉ đổi trạng thái serial.
+  quantityDelta Int               @map("quantity_delta")
+  onHandAfter   Int               @map("on_hand_after")
+  serialUnitId  String?           @map("serial_unit_id") @db.Uuid
+  /// Loại chứng từ gốc: GOODS_RECEIPT, STOCK_TRANSFER, STOCKTAKE, ORDER...
+  documentType  String?           @map("document_type") @db.VarChar(40)
+  documentId    String?           @map("document_id") @db.Uuid
+  note          String?
+  /// FK tới nhân viên, sẽ thêm ở nhóm 3.3
+  createdById   String?           @map("created_by_id") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  stockLevel StockLevel  @relation(fields: [variantId, locationId], references: [variantId, locationId], onDelete: Restrict)
+  serialUnit SerialUnit? @relation(fields: [serialUnitId], references: [id], onDelete: Restrict)
+
+  @@index([variantId, locationId, createdAt])
+  @@index([documentType, documentId])
+  @@index([serialUnitId])
+  @@map("stock_movements")
+}
+
+/// Nhà cung cấp (hãng hoặc nhà phân phối)
+model Supplier {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String   @db.VarChar(200)
+  phone     String?  @db.VarChar(20)
+  email     String?  @db.VarChar(200)
+  note      String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  goodsReceipts GoodsReceipt[]
+
+  @@map("suppliers")
+}
+
+/// Phiếu nhập hàng
+model GoodsReceipt {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  code        String         @unique @db.VarChar(30)
+  locationId  String         @map("location_id") @db.Uuid
+  supplierId  String?        @map("supplier_id") @db.Uuid
+  status      DocumentStatus @default(DRAFT)
+  note        String?
+  postedAt    DateTime?      @map("posted_at") @db.Timestamptz(3)
+  createdById String?        @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  location Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  supplier Supplier?          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines    GoodsReceiptLine[]
+
+  @@index([locationId, status])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLine {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  receiptId     String   @map("receipt_id") @db.Uuid
+  variantId     String   @map("variant_id") @db.Uuid
+  quantity      Int
+  /// Serial quét khi nhập; số phần tử phải bằng quantity nếu biến thể quản lý serial
+  serialNumbers String[] @default([]) @map("serial_numbers")
+
+  receipt GoodsReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, variantId])
+  @@map("goods_receipt_lines")
+}
+
+/// Phiếu chuyển hàng giữa showroom
+model StockTransfer {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  code           String         @unique @db.VarChar(30)
+  fromLocationId String         @map("from_location_id") @db.Uuid
+  toLocationId   String         @map("to_location_id") @db.Uuid
+  status         TransferStatus @default(DRAFT)
+  note           String?
+  shippedAt      DateTime?      @map("shipped_at") @db.Timestamptz(3)
+  receivedAt     DateTime?      @map("received_at") @db.Timestamptz(3)
+  createdById    String?        @map("created_by_id") @db.Uuid
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  fromLocation Location            @relation("TransferFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   Location            @relation("TransferTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+  lines        StockTransferLine[]
+
+  @@index([status, shippedAt])
+  @@map("stock_transfers")
+}
+
+model StockTransferLine {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  transferId    String   @map("transfer_id") @db.Uuid
+  variantId     String   @map("variant_id") @db.Uuid
+  quantity      Int
+  serialNumbers String[] @default([]) @map("serial_numbers")
+
+  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([transferId, variantId])
+  @@map("stock_transfer_lines")
+}
+
+/// Phiếu kiểm kê
+model Stocktake {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  code        String         @unique @db.VarChar(30)
+  locationId  String         @map("location_id") @db.Uuid
+  status      DocumentStatus @default(DRAFT)
+  note        String?
+  postedAt    DateTime?      @map("posted_at") @db.Timestamptz(3)
+  createdById String?        @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  location Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines    StocktakeLine[]
+
+  @@index([locationId, status])
+  @@map("stocktakes")
+}
+
+model StocktakeLine {
+  id          String @id @default(uuid(7)) @db.Uuid
+  stocktakeId String @map("stocktake_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
+  /// Số trên hệ thống tại thời điểm bắt đầu kiểm kê
+  systemQty   Int    @map("system_qty")
+  countedQty  Int    @map("counted_qty")
+
+  stocktake Stocktake      @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([stocktakeId, variantId])
+  @@map("stocktake_lines")
 }
