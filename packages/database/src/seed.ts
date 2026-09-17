@@ -9,10 +9,9 @@ if (!connectionString) {
 const db = createPrismaClient({ connectionString, maxConnections: 1 });
 
 const locations = [
-  { code: 'KHO-HCM', name: 'Kho tổng TP.HCM', type: 'WAREHOUSE', region: 'HCM' },
-  { code: 'CH-HCM-01', name: 'Cửa hàng TP.HCM 1', type: 'STORE', region: 'HCM' },
-  { code: 'CH-HCM-02', name: 'Cửa hàng TP.HCM 2', type: 'STORE', region: 'HCM' },
-  { code: 'CH-HN-01', name: 'Cửa hàng Hà Nội', type: 'STORE', region: 'HN' },
+  { code: 'CH-HCM-01', name: 'Showroom TP.HCM 1', type: 'STORE', region: 'HCM' },
+  { code: 'CH-HCM-02', name: 'Showroom TP.HCM 2', type: 'STORE', region: 'HCM' },
+  { code: 'CH-HN-01', name: 'Showroom Hà Nội', type: 'STORE', region: 'HN' },
 ] as const;
 
 async function main() {
@@ -24,7 +23,7 @@ async function main() {
     });
   }
   const total = await db.location.count();
-  console.log(`✅ Seed xong. Tổng số điểm tồn kho: ${total}`);
+  console.log(`✅ Seed xong. Tổng số showroom: ${total}`);
 }
 
 main()
