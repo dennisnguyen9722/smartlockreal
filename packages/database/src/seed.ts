@@ -8,7 +8,6 @@ if (!connectionString) {
 
 const db = createPrismaClient({ connectionString, maxConnections: 1 });
 
-// Mã điểm (code) sẽ dùng để ánh xạ sang mã kho trong MISA
 const locations = [
   { code: 'KHO-HCM', name: 'Kho tổng TP.HCM', type: 'WAREHOUSE', region: 'HCM' },
   { code: 'CH-HCM-01', name: 'Cửa hàng TP.HCM 1', type: 'STORE', region: 'HCM' },

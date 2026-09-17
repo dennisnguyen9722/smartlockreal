@@ -33,8 +33,7 @@ const EnvSchema = z
     JWT_CUSTOMER_REFRESH_SECRET: jwtSecret,
     JWT_STAFF_ACCESS_SECRET: jwtSecret,
     JWT_STAFF_REFRESH_SECRET: jwtSecret,
-
-    MISA_SYNC_MODE: z.enum(['excel', 'disabled']).default('excel'),
+    
   })
   .superRefine((env, ctx) => {
     const secrets = [
