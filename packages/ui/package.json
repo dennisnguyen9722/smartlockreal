@@ -28,15 +28,5 @@
   "peerDependencies": {
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
-  },
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "noEmit": true,
-    "paths": { "@ktm/ui/*": ["./src/*"] }
-  },
-  "include": ["src"]
+  }
 }
