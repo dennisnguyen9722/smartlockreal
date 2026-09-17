@@ -7,14 +7,20 @@ import { APP_FILTER } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RealtimeModule } from './realtime/realtime.module';
 import { RedisModule } from './redis/redis.module';
+import { DevController } from './dev/dev.controller';
+import { QueueModule } from './queue/queue.module';
 
 @Module({})
 export class AppModule {
   static register(env: Env): DynamicModule {
     return {
       module: AppModule,
-      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, RealtimeModule],
-      controllers: [HealthController],
+      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, QueueModule, RealtimeModule],
+      controllers: [
+        HealthController,
+        // Endpoint phát triển chỉ tồn tại ngoài production
+        ...(env.NODE_ENV === 'production' ? [] : [DevController]),
+      ],
       providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
     };
   }

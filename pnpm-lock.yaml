@@ -44,6 +44,9 @@ importers:
       '@socket.io/redis-adapter':
         specifier: ^8.3.0
         version: 8.3.0(socket.io-adapter@2.5.8)
+      bullmq:
+        specifier: ^6.3.6
+        version: 6.3.6(ioredis@6.0.0)(pg@8.23.0)
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
