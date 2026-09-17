@@ -528,6 +528,8 @@ model StockMovement {
   stockLevel StockLevel  @relation(fields: [variantId, locationId], references: [variantId, locationId], onDelete: Restrict)
   serialUnit SerialUnit? @relation(fields: [serialUnitId], references: [id], onDelete: Restrict)
 
+  createdBy Staff? @relation("StockMovementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
   @@index([variantId, locationId, createdAt])
   @@index([documentType, documentId])
   @@index([serialUnitId])
@@ -567,6 +569,8 @@ model GoodsReceipt {
   supplier Supplier?          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   lines    GoodsReceiptLine[]
 
+  createdBy Staff? @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
   @@index([locationId, status])
   @@map("goods_receipts")
 }
@@ -604,6 +608,8 @@ model StockTransfer {
   toLocation   Location            @relation("TransferTo", fields: [toLocationId], references: [id], onDelete: Restrict)
   lines        StockTransferLine[]
 
+  createdBy Staff? @relation("StockTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
   @@index([status, shippedAt])
   @@map("stock_transfers")
 }
@@ -637,6 +643,8 @@ model Stocktake {
   location Location        @relation(fields: [locationId], references: [id], onDelete: Restrict)
   lines    StocktakeLine[]
 
+  createdBy Staff? @relation("StocktakeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
   @@index([locationId, status])
   @@map("stocktakes")
 }
@@ -654,4 +662,190 @@ model StocktakeLine {
 
   @@unique([stocktakeId, variantId])
   @@map("stocktake_lines")
+}
+
+// ============================================================
+// NHÓM 3.3: KHÁCH HÀNG VÀ NHÂN VIÊN
+// Khách không đăng nhập; chỉ nhân viên có tài khoản.
+// Quyền của từng vai trò định nghĩa trong code (@ktm/shared), không nằm trong database.
+// Unique có điều kiện và CHECK viết tay nằm trong migration *_accounts.
+// Nhân viên đã có chứng từ kho KHÔNG xóa được (FK Restrict): chỉ chuyển DISABLED.
+// ============================================================
+
+enum CustomerType {
+  INDIVIDUAL
+  BUSINESS
+
+  @@map("customer_type")
+}
+
+enum CustomerSource {
+  WEBSITE
+  ZALO
+  STORE
+  REFERRAL
+  OTHER
+
+  @@map("customer_source")
+}
+
+enum StaffRole {
+  SUPER_ADMIN
+  SALE_STAFF
+
+  @@map("staff_role")
+}
+
+enum StaffStatus {
+  ACTIVE
+  DISABLED
+
+  @@map("staff_status")
+}
+
+/// Nhóm khách: dùng để tính giá (nhóm 3.4)
+model CustomerGroup {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  code        String   @unique @db.VarChar(40)
+  name        String   @db.VarChar(120)
+  description String?
+  /// Nhóm gán cho khách mới; chỉ một nhóm được là mặc định
+  isDefault   Boolean  @default(false) @map("is_default")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customers Customer[]
+
+  @@map("customer_groups")
+}
+
+/// Khách hàng (không có tài khoản đăng nhập)
+model Customer {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  type                 CustomerType   @default(INDIVIDUAL)
+  groupId              String         @map("group_id") @db.Uuid
+  /// Tên khách lẻ, hoặc tên hiển thị của doanh nghiệp
+  fullName             String         @map("full_name") @db.VarChar(200)
+  /// Dạng +84xxxxxxxxx. Bắt buộc và duy nhất với khách cá nhân.
+  phone                String?        @db.VarChar(16)
+  email                String?        @db.VarChar(200)
+  companyName          String?        @map("company_name") @db.VarChar(255)
+  taxCode              String?        @map("tax_code") @db.VarChar(20)
+  /// Địa chỉ ghi trên hóa đơn
+  invoiceAddress       String?        @map("invoice_address")
+  /// Nhân viên kinh doanh phụ trách
+  assignedStaffId      String?        @map("assigned_staff_id") @db.Uuid
+  source               CustomerSource @default(WEBSITE)
+  note                 String?
+  /// Đồng ý chính sách dữ liệu cá nhân (Nghị định 13/2023)
+  privacyConsentAt     DateTime?      @map("privacy_consent_at") @db.Timestamptz(3)
+  privacyPolicyVersion String?        @map("privacy_policy_version") @db.VarChar(20)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  group         CustomerGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  assignedStaff Staff?            @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  addresses     CustomerAddress[]
+  contacts      CustomerContact[]
+
+  @@index([groupId])
+  @@index([assignedStaffId])
+  @@index([phone])
+  @@map("customers")
+}
+
+/// Địa chỉ theo hành chính 2 cấp (tỉnh/thành, phường/xã) áp dụng từ 01/07/2025
+model CustomerAddress {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  recipientName  String   @map("recipient_name") @db.VarChar(200)
+  recipientPhone String   @map("recipient_phone") @db.VarChar(16)
+  provinceCode   String   @map("province_code") @db.VarChar(10)
+  provinceName   String   @map("province_name") @db.VarChar(100)
+  wardCode       String   @map("ward_code") @db.VarChar(10)
+  wardName       String   @map("ward_name") @db.VarChar(100)
+  /// Số nhà, tên đường, tòa nhà...
+  street         String
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+/// Người liên hệ của khách doanh nghiệp
+model CustomerContact {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  fullName   String   @map("full_name") @db.VarChar(200)
+  phone      String?  @db.VarChar(16)
+  email      String?  @db.VarChar(200)
+  position   String?  @db.VarChar(120)
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_contacts")
+}
+
+/// Nhân viên: đối tượng duy nhất đăng nhập hệ thống
+model Staff {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  /// Luôn viết thường
+  email             String      @unique @db.VarChar(200)
+  fullName          String      @map("full_name") @db.VarChar(200)
+  phone             String?     @db.VarChar(16)
+  /// Argon2id; KHÔNG bao giờ trả về qua API
+  passwordHash      String      @map("password_hash")
+  role              StaffRole   @default(SALE_STAFF)
+  status            StaffStatus @default(ACTIVE)
+  failedLoginCount  Int         @default(0) @map("failed_login_count")
+  lockedUntil       DateTime?   @map("locked_until") @db.Timestamptz(3)
+  lastLoginAt       DateTime?   @map("last_login_at") @db.Timestamptz(3)
+  passwordChangedAt DateTime    @default(now()) @map("password_changed_at") @db.Timestamptz(3)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions          StaffSession[]
+  assignedCustomers Customer[]
+  goodsReceipts     GoodsReceipt[]  @relation("GoodsReceiptCreatedBy")
+  stockTransfers    StockTransfer[] @relation("StockTransferCreatedBy")
+  stocktakes        Stocktake[]     @relation("StocktakeCreatedBy")
+  stockMovements    StockMovement[] @relation("StockMovementCreatedBy")
+
+  @@map("staff")
+}
+
+/// Phiên đăng nhập (refresh token xoay vòng)
+model StaffSession {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  staffId      String    @map("staff_id") @db.Uuid
+  /// SHA-256 (hex) của refresh token; KHÔNG lưu token gốc
+  tokenHash    String    @unique @map("token_hash") @db.Char(64)
+  /// Mọi phiên sinh ra từ cùng một lần đăng nhập dùng chung family_id
+  familyId     String    @map("family_id") @db.Uuid
+  /// Phiên mới thay thế phiên này khi làm mới token
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
+  ipAddress    String?   @map("ip_address") @db.Inet
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  /// LOGOUT, ROTATED, REUSE_DETECTED, ADMIN, PASSWORD_CHANGED
+  revokeReason String?   @map("revoke_reason") @db.VarChar(40)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([familyId])
+  @@map("staff_sessions")
 }
