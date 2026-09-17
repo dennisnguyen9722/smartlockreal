@@ -1,6 +1,7 @@
 import { connection } from 'next/server';
 import { formatVnd } from '@ktm/shared';
 import { cn } from '@ktm/ui/lib/utils';
+import { Button } from '@ktm/ui/components/button';
 
 interface Health {
     status: string;
@@ -38,6 +39,11 @@ export default async function HomePage() {
                     ? `✅ ${health.status}, database ${health.database} (${health.databaseLatencyMs}ms)`
                     : '❌ không kết nối được'}
             </p>
+            <div className="flex gap-2">
+                <Button>Xem sản phẩm</Button>
+                <Button variant="outline">Yêu cầu báo giá</Button>
+            </div>
         </main>
+
     );
 }
