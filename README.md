@@ -91,3 +91,12 @@ pnpm add x --filter @ktm/ui
 | `next build` lỗi `<Html> should not be imported` | Không đặt `NODE_ENV` trong `.env` |
 | zsh `no matches found` hoặc chuỗi bị thay bằng lệnh cũ | Đặt `*` và `!!` trong dấu nháy đơn |
 | API tắt không tự chạy lại khi dev | `node --watch` chỉ chạy lại khi file đổi: `touch apps/api/dist/main.js` |
+
+## Lưu ý khi viết SQL tay trong migration
+
+- Prisma **bỏ qua** CHECK, trigger, EXCLUDE và chỉ mục có `WHERE`.
+- Prisma **đòi xóa** chỉ mục thường (không có `WHERE`) nếu không khai báo trong `schema.prisma`.
+  Dùng chỉ mục có điều kiện thay thế.
+- Sau mỗi `db:migrate`, nếu Prisma **hỏi tên migration mới**: nhấn `Ctrl + C`,
+  chạy `db:migrate --name drift_check --create-only` để xem Prisma muốn đổi gì, rồi xóa file đó.
+- Migration đã chạy thì không sửa; muốn sửa thì tạo migration mới.

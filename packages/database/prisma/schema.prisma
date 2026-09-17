@@ -119,6 +119,8 @@ model Brand {
 
   products Product[]
 
+  voucherTargets VoucherTarget[]
+
   @@map("brands")
 }
 
@@ -138,6 +140,8 @@ model Category {
   children        Category[]       @relation("CategoryTree")
   products        Product[]
   specDefinitions SpecDefinition[]
+
+  voucherTargets VoucherTarget[]
 
   @@index([parentId])
   @@map("categories")
@@ -229,6 +233,8 @@ model Product {
   relations         ProductRelation[]  @relation("RelationSource")
   relatedFrom       ProductRelation[]  @relation("RelationTarget")
 
+  voucherTargets VoucherTarget[]
+
   @@index([brandId])
   @@index([categoryId])
   @@index([type, status])
@@ -298,6 +304,13 @@ model ProductVariant {
   receiptLines   GoodsReceiptLine[]
   transferLines  StockTransferLine[]
   stocktakeLines StocktakeLine[]
+
+  regionPrices  VariantRegionPrice[]
+  groupPrices   GroupVariantPrice[]
+  quantityTiers QuantityPriceTier[]
+  saleItems     SaleCampaignItem[]
+  giftTriggers  GiftTrigger[]
+  giftItems     GiftItem[]
 
   @@unique([productId, optionKey])
   @@map("product_variants")
@@ -717,6 +730,10 @@ model CustomerGroup {
 
   customers Customer[]
 
+  /// Chiết khấu mặc định theo phần vạn (1500 = 15%)
+  discountBps   Int                 @default(0) @map("discount_bps")
+  variantPrices GroupVariantPrice[]
+
   @@map("customer_groups")
 }
 
@@ -821,6 +838,10 @@ model Staff {
   stocktakes        Stocktake[]     @relation("StocktakeCreatedBy")
   stockMovements    StockMovement[] @relation("StockMovementCreatedBy")
 
+  saleCampaigns  SaleCampaign[]  @relation("SaleCampaignCreatedBy")
+  vouchers       Voucher[]       @relation("VoucherCreatedBy")
+  giftPromotions GiftPromotion[] @relation("GiftPromotionCreatedBy")
+
   @@map("staff")
 }
 
@@ -848,4 +869,265 @@ model StaffSession {
   @@index([staffId])
   @@index([familyId])
   @@map("staff_sessions")
+}
+
+// ============================================================
+// NHÓM 3.4: GIÁ VÀ KHUYẾN MÃI
+// Quy tắc: lấy giá THẤP NHẤT giữa các lớp (lẻ/khu vực, nhóm, số lượng, flash sale),
+// không cộng dồn. Báo giá dự án thay thế tất cả. Voucher áp dụng sau cùng trên tổng đơn.
+// Giá tính theo % làm tròn XUỐNG hàng nghìn. Phần trăm lưu theo phần vạn (bps).
+// CHECK, EXCLUDE và trigger viết tay nằm trong migration *_pricing.
+// Cần extension btree_gist. sale_campaign_items.starts_at/ends_at/is_published do trigger quản lý.
+// ============================================================
+
+enum PromotionStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+
+  @@map("promotion_status")
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED_AMOUNT
+
+  @@map("discount_type")
+}
+
+enum VoucherStatus {
+  ACTIVE
+  DISABLED
+
+  @@map("voucher_status")
+}
+
+enum VoucherTargetType {
+  PRODUCT
+  CATEGORY
+  BRAND
+
+  @@map("voucher_target_type")
+}
+
+enum RedemptionStatus {
+  /// Đã áp vào đơn chưa hoàn tất
+  RESERVED
+  /// Đơn đã thanh toán hoặc hoàn tất
+  USED
+  /// Đơn bị hủy, trả lại lượt dùng
+  RELEASED
+
+  @@map("redemption_status")
+}
+
+/// Giá theo khu vực (chủ yếu cho combo có lắp đặt); thay cho giá lẻ ở khu vực đó
+model VariantRegionPrice {
+  variantId String   @map("variant_id") @db.Uuid
+  region    Region
+  price     BigInt
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, region])
+  @@map("variant_region_prices")
+}
+
+/// Giá riêng của một nhóm khách cho một biến thể; thay cho chiết khấu % của nhóm
+model GroupVariantPrice {
+  groupId   String   @map("group_id") @db.Uuid
+  variantId String   @map("variant_id") @db.Uuid
+  price     BigInt
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  group   CustomerGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, variantId])
+  @@index([variantId])
+  @@map("group_variant_prices")
+}
+
+/// Bậc giá theo số lượng (mọi khách): giá cố định HOẶC giảm %
+model QuantityPriceTier {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  variantId   String   @map("variant_id") @db.Uuid
+  minQuantity Int      @map("min_quantity")
+  fixedPrice  BigInt?  @map("fixed_price")
+  discountBps Int?     @map("discount_bps")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, minQuantity])
+  @@map("quantity_price_tiers")
+}
+
+/// Đợt flash sale
+model SaleCampaign {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  name        String          @db.VarChar(200)
+  description String?
+  startsAt    DateTime        @map("starts_at") @db.Timestamptz(3)
+  endsAt      DateTime        @map("ends_at") @db.Timestamptz(3)
+  status      PromotionStatus @default(DRAFT)
+  createdById String?         @map("created_by_id") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy Staff?             @relation("SaleCampaignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items     SaleCampaignItem[]
+
+  @@index([status, startsAt, endsAt])
+  @@map("sale_campaigns")
+}
+
+/// Sản phẩm trong đợt flash sale.
+/// starts_at, ends_at, is_published được trigger TỰ ĐỒNG BỘ từ sale_campaigns (giá trị gửi lên sẽ bị ghi đè).
+model SaleCampaignItem {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  campaignId    String   @map("campaign_id") @db.Uuid
+  variantId     String   @map("variant_id") @db.Uuid
+  salePrice     BigInt   @map("sale_price")
+  /// Số lượng tối đa bán theo giá sale; null = không giới hạn (vẫn bị giới hạn bởi tồn kho)
+  quantityLimit Int?     @map("quantity_limit")
+  soldQuantity  Int      @default(0) @map("sold_quantity")
+  perOrderLimit Int?     @map("per_order_limit")
+  startsAt      DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt        DateTime @map("ends_at") @db.Timestamptz(3)
+  isPublished   Boolean  @default(false) @map("is_published")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  campaign SaleCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, variantId])
+  @@index([variantId, isPublished, startsAt, endsAt])
+  @@map("sale_campaign_items")
+}
+
+/// Mã giảm giá
+model Voucher {
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  /// Chữ in hoa, số, gạch ngang
+  code               String        @unique @db.VarChar(40)
+  name               String        @db.VarChar(200)
+  description        String?
+  discountType       DiscountType  @map("discount_type")
+  /// Dùng khi PERCENT
+  discountBps        Int?          @map("discount_bps")
+  /// Dùng khi FIXED_AMOUNT
+  discountAmount     BigInt?       @map("discount_amount")
+  /// Mức giảm tối đa cho PERCENT
+  maxDiscount        BigInt?       @map("max_discount")
+  minOrderAmount     BigInt        @default(0) @map("min_order_amount")
+  startsAt           DateTime      @map("starts_at") @db.Timestamptz(3)
+  endsAt             DateTime      @map("ends_at") @db.Timestamptz(3)
+  /// Tổng lượt dùng tối đa; null = không giới hạn
+  usageLimit         Int?          @map("usage_limit")
+  usedCount          Int           @default(0) @map("used_count")
+  /// Lượt dùng tối đa mỗi số điện thoại; null = không giới hạn
+  perPhoneLimit      Int?          @default(1) @map("per_phone_limit")
+  /// Có được áp cho hàng đang flash sale không
+  appliesToSaleItems Boolean       @default(false) @map("applies_to_sale_items")
+  status             VoucherStatus @default(ACTIVE)
+  createdById        String?       @map("created_by_id") @db.Uuid
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy   Staff?              @relation("VoucherCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  targets     VoucherTarget[]
+  redemptions VoucherRedemption[]
+
+  @@index([status, startsAt, endsAt])
+  @@map("vouchers")
+}
+
+/// Phạm vi áp dụng voucher. Không có dòng nào = áp dụng cho toàn bộ sản phẩm.
+model VoucherTarget {
+  id         String            @id @default(uuid(7)) @db.Uuid
+  voucherId  String            @map("voucher_id") @db.Uuid
+  targetType VoucherTargetType @map("target_type")
+  productId  String?           @map("product_id") @db.Uuid
+  categoryId String?           @map("category_id") @db.Uuid
+  brandId    String?           @map("brand_id") @db.Uuid
+
+  voucher  Voucher   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([voucherId])
+  @@map("voucher_targets")
+}
+
+/// Lượt dùng voucher
+model VoucherRedemption {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  voucherId      String           @map("voucher_id") @db.Uuid
+  /// FK tới đơn hàng, sẽ thêm ở nhóm 3.5
+  orderId        String?          @map("order_id") @db.Uuid
+  phone          String           @db.VarChar(16)
+  discountAmount BigInt           @map("discount_amount")
+  status         RedemptionStatus @default(RESERVED)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  @@index([voucherId, phone])
+  @@index([orderId])
+  @@map("voucher_redemptions")
+}
+
+/// Chương trình quà tặng kèm (tặng một lần mỗi đơn)
+model GiftPromotion {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  name           String          @db.VarChar(200)
+  description    String?
+  startsAt       DateTime        @map("starts_at") @db.Timestamptz(3)
+  endsAt         DateTime        @map("ends_at") @db.Timestamptz(3)
+  status         PromotionStatus @default(DRAFT)
+  /// Điều kiện theo giá trị đơn; null = không xét
+  minOrderAmount BigInt?         @map("min_order_amount")
+  createdById    String?         @map("created_by_id") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy Staff?        @relation("GiftPromotionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  triggers  GiftTrigger[]
+  items     GiftItem[]
+
+  @@index([status, startsAt, endsAt])
+  @@map("gift_promotions")
+}
+
+/// Điều kiện theo sản phẩm: đơn có ÍT NHẤT MỘT biến thể đạt số lượng tối thiểu
+model GiftTrigger {
+  id          String @id @default(uuid(7)) @db.Uuid
+  promotionId String @map("promotion_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
+  minQuantity Int    @default(1) @map("min_quantity")
+
+  promotion GiftPromotion  @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, variantId])
+  @@map("gift_triggers")
+}
+
+/// Quà tặng: biến thể thật trong kho, giá 0 trên đơn, có trừ tồn kho
+model GiftItem {
+  promotionId String @map("promotion_id") @db.Uuid
+  variantId   String @map("variant_id") @db.Uuid
+  quantity    Int    @default(1)
+
+  promotion GiftPromotion  @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@id([promotionId, variantId])
+  @@map("gift_items")
 }
