@@ -192,6 +192,8 @@ model InstallationClass {
 
   orderLines OrderLine[]
 
+  quoteLines QuoteLine[]
+
   @@map("installation_classes")
 }
 
@@ -332,6 +334,8 @@ model ProductVariant {
   /// Thuế suất VAT theo phần vạn (1000 = 10%)
   vatRateBps Int         @default(1000) @map("vat_rate_bps")
   orderLines OrderLine[]
+
+  quoteLines QuoteLine[]
 
   @@unique([productId, optionKey])
   @@map("product_variants")
@@ -808,6 +812,8 @@ model Customer {
   reviews          ProductReview[]
   outboundMessages OutboundMessage[]
 
+  quotes Quote[]
+
   @@index([groupId])
   @@index([assignedStaffId])
   @@index([phone])
@@ -850,6 +856,8 @@ model CustomerContact {
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  quotes Quote[]
 
   @@index([customerId])
   @@map("customer_contacts")
@@ -906,6 +914,10 @@ model Staff {
   updatedSettings       SystemSetting[]     @relation("SettingUpdatedBy")
   notifications         StaffNotification[]
   auditLogs             AuditLog[]
+
+  createdQuotes  Quote[] @relation("QuoteCreatedBy")
+  approvedQuotes Quote[] @relation("QuoteApprovedBy")
+  sentQuotes     Quote[] @relation("QuoteSentBy")
 
   @@map("staff")
 }
@@ -1403,6 +1415,10 @@ model Order {
 
   outboundMessages OutboundMessage[]
 
+  /// Báo giá gốc (đơn công trình); mỗi báo giá chỉ tạo một đơn
+  quoteId String? @unique @map("quote_id") @db.Uuid
+  quote   Quote?  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
   @@index([customerId])
   @@index([status, placedAt])
   @@index([customerPhone])
@@ -1456,6 +1472,9 @@ model OrderLine {
 
   review         ProductReview?
   reviewRequests ReviewRequest[]
+
+  quoteLineId String?    @map("quote_line_id") @db.Uuid
+  quoteLine   QuoteLine? @relation(fields: [quoteLineId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([variantId])
@@ -2413,4 +2432,141 @@ model AuditLog {
   @@index([staffId, createdAt])
   @@index([action, createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// NHÓM 3.6: BÁO GIÁ CÔNG TRÌNH
+// Một báo giá -> một đơn (orders.quote_id duy nhất, kênh PROJECT). Không mua nợ.
+// Sửa sau khi gửi = tạo phiên bản mới cùng mã; bản cũ chuyển SUPERSEDED.
+// Dòng báo giá chỉ sửa được khi báo giá còn DRAFT (trigger).
+// Báo giá không giữ hàng; giữ hàng khi chuyển thành đơn.
+// CHECK, unique có điều kiện và trigger viết tay nằm trong migration *_quotes.
+// Tạo phiên bản mới: chuyển bản cũ sang SUPERSEDED TRƯỚC, rồi mới thêm bản mới (unique quotes_one_current_revision).
+// ============================================================
+
+enum QuoteStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+  SUPERSEDED
+  CANCELLED
+
+  @@map("quote_status")
+}
+
+enum QuoteSendChannel {
+  ZALO
+  EMAIL
+  OTHER
+
+  @@map("quote_send_channel")
+}
+
+model Quote {
+  id                 String      @id @default(uuid(7)) @db.Uuid
+  /// Mã dùng chung cho mọi phiên bản, vd: BG-260917-0001
+  code               String      @db.VarChar(30)
+  revision           Int         @default(1)
+  previousRevisionId String?     @unique @map("previous_revision_id") @db.Uuid
+  status             QuoteStatus @default(DRAFT)
+  customerId         String      @map("customer_id") @db.Uuid
+  contactId          String?     @map("contact_id") @db.Uuid
+  projectName        String?     @map("project_name") @db.VarChar(255)
+  siteAddress        String?     @map("site_address")
+  siteRegion         Region?     @map("site_region")
+  validUntil         DateTime    @map("valid_until") @db.Date
+
+  // Tiền (VND), giá dòng CHƯA VAT
+  vatInvoiceRequested Boolean @default(true) @map("vat_invoice_requested")
+  /// Tổng theo giá hệ thống tính (để thể hiện mức tiết kiệm)
+  referenceSubtotal   BigInt  @default(0) @map("reference_subtotal")
+  subtotal            BigInt  @default(0)
+  shippingFee         BigInt  @default(0) @map("shipping_fee")
+  vatTotal            BigInt  @default(0) @map("vat_total")
+  grandTotal          BigInt  @default(0) @map("grand_total")
+  depositRequired     BigInt  @default(0) @map("deposit_required")
+
+  // Duyệt chiết khấu
+  /// Mức giảm lớn nhất trên các dòng so với giá hệ thống (phần vạn)
+  maxDiscountBps   Int       @default(0) @map("max_discount_bps")
+  requiresApproval Boolean   @default(false) @map("requires_approval")
+  approvedById     String?   @map("approved_by_id") @db.Uuid
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz(3)
+  approvalNote     String?   @map("approval_note")
+
+  // Gửi khách
+  pdfUrl         String?           @map("pdf_url")
+  pdfGeneratedAt DateTime?         @map("pdf_generated_at") @db.Timestamptz(3)
+  sentAt         DateTime?         @map("sent_at") @db.Timestamptz(3)
+  sentVia        QuoteSendChannel? @map("sent_via")
+  sentById       String?           @map("sent_by_id") @db.Uuid
+
+  /// Điều khoản in trên báo giá (thời gian giao, bảo hành, thanh toán...)
+  terms          String?
+  internalNote   String?   @map("internal_note")
+  rejectedReason String?   @map("rejected_reason")
+  createdById    String?   @map("created_by_id") @db.Uuid
+  version        Int       @default(1)
+  acceptedAt     DateTime? @map("accepted_at") @db.Timestamptz(3)
+  convertedAt    DateTime? @map("converted_at") @db.Timestamptz(3)
+  cancelledAt    DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  contact          CustomerContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  previousRevision Quote?           @relation("QuoteRevisions", fields: [previousRevisionId], references: [id], onDelete: Restrict)
+  nextRevision     Quote?           @relation("QuoteRevisions")
+  approvedBy       Staff?           @relation("QuoteApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  sentBy           Staff?           @relation("QuoteSentBy", fields: [sentById], references: [id], onDelete: Restrict)
+  createdBy        Staff?           @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lines            QuoteLine[]
+  order            Order?
+
+  @@unique([code, revision])
+  @@index([customerId])
+  @@index([status, validUntil])
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  quoteId             String        @map("quote_id") @db.Uuid
+  /// Dòng khóa mà dòng lắp đặt gắn vào
+  parentLineId        String?       @map("parent_line_id") @db.Uuid
+  /// Chỉ PRODUCT, BUNDLE, INSTALLATION
+  lineType            OrderLineType @map("line_type")
+  variantId           String?       @map("variant_id") @db.Uuid
+  sku                 String?       @db.VarChar(64)
+  name                String        @db.VarChar(255)
+  quantity            Int
+  /// Giá hệ thống tính tại lúc lập báo giá (chưa VAT)
+  referencePrice      BigInt        @map("reference_price")
+  /// Giá báo cho khách (chưa VAT)
+  unitPrice           BigInt        @map("unit_price")
+  /// (reference - unit) / reference, phần vạn; âm nếu báo cao hơn giá hệ thống
+  discountBps         Int           @map("discount_bps")
+  lineTotal           BigInt        @map("line_total")
+  vatRateBps          Int           @map("vat_rate_bps")
+  vatAmount           BigInt        @default(0) @map("vat_amount")
+  installationClassId String?       @map("installation_class_id") @db.Uuid
+  installationRegion  Region?       @map("installation_region")
+  note                String?
+  sortOrder           Int           @default(0) @map("sort_order")
+
+  quote             Quote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  parentLine        QuoteLine?         @relation("QuoteLineTree", fields: [parentLineId], references: [id], onDelete: Cascade)
+  childLines        QuoteLine[]        @relation("QuoteLineTree")
+  variant           ProductVariant?    @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  installationClass InstallationClass? @relation(fields: [installationClassId], references: [id], onDelete: Restrict)
+  orderLines        OrderLine[]
+
+  @@index([quoteId, sortOrder])
+  @@index([variantId])
+  @@map("quote_lines")
 }
