@@ -93,6 +93,9 @@ importers:
       '@ktm/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@socket.io/redis-emitter':
+        specifier: ^5.1.0
+        version: 5.1.0
       bullmq:
         specifier: ^6.3.6
         version: 6.3.6(ioredis@6.0.0)(pg@8.23.0)
@@ -404,6 +407,9 @@ packages:
     engines: {node: '>=10.0.0'}
     peerDependencies:
       socket.io-adapter: ^2.5.4
+
+  '@socket.io/redis-emitter@5.1.0':
+    resolution: {integrity: sha512-QQUFPBq6JX7JIuM/X1811ymKlAfwufnQ8w6G2/59Jaqp09hdF1GJ/+e8eo/XdcmT0TqkvcSa2TT98ggTXa5QYw==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1799,6 +1805,14 @@ snapshots:
       notepack.io: 3.0.1
       socket.io-adapter: 2.5.8
       uid2: 1.0.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@socket.io/redis-emitter@5.1.0':
+    dependencies:
+      debug: 4.3.7
+      notepack.io: 3.0.1
+      socket.io-parser: 4.2.7
     transitivePeerDependencies:
       - supports-color
 

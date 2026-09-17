@@ -1,6 +1,14 @@
+import { Emitter } from '@socket.io/redis-emitter';
 import { type Job, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
-import { QUEUE_PREFIX, QueueName } from '@ktm/shared';
+import {
+  type JobCompletedPayload,
+  QUEUE_PREFIX,
+  QueueName,
+  REALTIME_NAMESPACE,
+  RealtimeEvent,
+  type SystemHelloJobData,
+} from '@ktm/shared';
 import { loadEnv } from './env';
 
 const env = loadEnv();
@@ -13,16 +21,33 @@ const connection = new Redis(env.REDIS_URL, {
 });
 connection.on('error', (error) => console.error('[Redis]', error.message));
 
-const systemWorker = new Worker(
+// Kết nối riêng để phát thông báo realtime qua Redis (chỉ dùng lệnh publish)
+const emitterRedis = new Redis(env.REDIS_URL, { connectionName: 'ktm-worker-emitter' });
+emitterRedis.on('error', (error) => console.error('[Redis:emitter]', error.message));
+const realtime = new Emitter(emitterRedis).of(REALTIME_NAMESPACE);
+
+const systemWorker = new Worker<SystemHelloJobData>(
   QueueName.SYSTEM,
-  async (job: Job) => {
+  async (job: Job<SystemHelloJobData>) => {
     console.log(`▶ Xử lý job "${job.name}" #${job.id}`, job.data);
     return { processedAt: new Date().toISOString() };
   },
   { connection, prefix: QUEUE_PREFIX, concurrency: env.WORKER_CONCURRENCY },
 );
 
-systemWorker.on('completed', (job) => console.log(`✅ Xong job #${job.id}`, job.returnvalue));
+systemWorker.on('completed', (job) => {
+  console.log(`✅ Xong job #${job.id}`, job.returnvalue);
+  if (!job.data.notifyRoom) return;
+
+  const payload: JobCompletedPayload = {
+    queue: QueueName.SYSTEM,
+    jobId: job.id ?? '',
+    name: job.name,
+    result: job.returnvalue,
+  };
+  realtime.to(job.data.notifyRoom).emit(RealtimeEvent.JOB_COMPLETED, payload);
+});
+
 systemWorker.on('failed', (job, error) => console.error(`❌ Lỗi job #${job?.id}:`, error.message));
 systemWorker.on('error', (error) => console.error('[Worker]', error.message));
 
@@ -38,6 +63,7 @@ async function shutdown(signal: string) {
   console.log(`Nhận ${signal}, đợi các job đang chạy hoàn tất...`);
   await systemWorker.close(); // chờ job đang xử lý xong, không nhận job mới
   await connection.quit();
+  await emitterRedis.quit();
   console.log('Đã tắt worker');
   process.exit(0);
 }

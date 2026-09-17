@@ -33,6 +33,7 @@ export const RealtimeEvent = {
   STOCK_LOW: 'stock:low',
   INSTALL_JOB_ASSIGNED: 'install:job-assigned',
   SYSTEM_PING: 'system:ping',
+  JOB_COMPLETED: 'job:completed',
 } as const;
 export type RealtimeEvent = (typeof RealtimeEvent)[keyof typeof RealtimeEvent];
 
@@ -44,3 +45,5 @@ export const QueueName = {
   SYSTEM: 'system', // Job hệ thống, dùng để thử nghiệm và bảo trì
 } as const;
 export type QueueName = (typeof QueueName)[keyof typeof QueueName];
+
+export const REALTIME_NAMESPACE = '/realtime';

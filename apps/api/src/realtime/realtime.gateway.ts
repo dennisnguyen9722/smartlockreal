@@ -8,7 +8,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import type { Namespace, Socket } from 'socket.io';
-import { RealtimeEvent } from '@ktm/shared';
+import { REALTIME_NAMESPACE, RealtimeEvent } from '@ktm/shared';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
 
@@ -16,7 +16,8 @@ import type { Env } from '../config/env';
  * Quy ước room (dùng từ Bước 4, sau khi có xác thực):
  *   staff:<id> | role:<mã vai trò> | location:<mã điểm> | customer:<id>
  */
-@WebSocketGateway({ namespace: '/realtime' })
+@WebSocketGateway({ namespace: REALTIME_NAMESPACE })
+
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private readonly server!: Namespace;

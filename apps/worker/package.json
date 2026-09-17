@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ktm/shared": "workspace:*",
+    "@socket.io/redis-emitter": "^5.1.0",
     "bullmq": "^6.3.6",
     "ioredis": "^6.0.0",
     "zod": "^4.6.5"

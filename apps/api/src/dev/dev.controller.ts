@@ -1,8 +1,13 @@
-import { Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { ErrorCode } from '@ktm/shared';
+import { z } from 'zod';
+import { ErrorCode, type SystemHelloJobData } from '@ktm/shared';
 import { AppException } from '../common/errors/app.exception';
 import { SYSTEM_QUEUE } from '../queue/queue.module';
+
+const AddSystemJobSchema = z.object({
+  notifySocketId: z.string().min(1).max(64).optional(),
+});
 
 /** Endpoint hỗ trợ phát triển. KHÔNG được đăng ký ở production. */
 @Controller('dev')
@@ -11,9 +16,24 @@ export class DevController {
 
   @Post('system-jobs')
   @HttpCode(HttpStatus.ACCEPTED)
-  async addSystemJob() {
+  async addSystemJob(@Body() body: unknown) {
+    const parsed = AddSystemJobSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        HttpStatus.BAD_REQUEST,
+        parsed.error.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })),
+      );
+    }
+
+    const data: SystemHelloJobData = {
+      from: 'api',
+      at: new Date().toISOString(),
+      notifyRoom: parsed.data.notifySocketId,
+    };
+
     try {
-      const job = await this.systemQueue.add('hello', { from: 'api', at: new Date().toISOString() });
+      const job = await this.systemQueue.add('hello', data);
       return { jobId: job.id };
     } catch {
       throw new AppException(ErrorCode.SERVICE_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE, {
