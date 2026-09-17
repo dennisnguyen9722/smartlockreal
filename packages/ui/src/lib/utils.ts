@@ -1,7 +1,3 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-/** Ghép class Tailwind, class sau ghi đè class trước nếu xung đột (vd: p-2 và p-4) */
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// cn chính thức của shadcn: thay thế clsx + tailwind-merge, cách dùng giữ nguyên.
+// Giữ file này để code dự án vẫn import từ '@ktm/ui/lib/utils'.
+export { cn } from 'cn';
