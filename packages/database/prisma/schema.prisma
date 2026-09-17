@@ -52,6 +52,10 @@ model Location {
 
   shipmentsOut Shipment[]
 
+  technicians            Technician[]
+  receivedWarrantyClaims WarrantyClaim[]
+  vendorReturns          VendorReturn[]
+
   @@map("locations")
 }
 
@@ -504,6 +508,13 @@ model SerialUnit {
 
   shipmentSerials ShipmentLineSerial[]
 
+  warranties             Warranty[]
+  serviceJobSerials      ServiceJobSerial[]
+  warrantyClaims         WarrantyClaim[]    @relation("ClaimSerial")
+  replacementClaims      WarrantyClaim[]    @relation("ClaimReplacementSerial")
+  vendorReturnItems      VendorReturnItem[] @relation("VendorReturnSerial")
+  vendorReplacementItems VendorReturnItem[] @relation("VendorReturnReplacementSerial")
+
   @@unique([variantId, serialNumber])
   @@index([serialNumber])
   @@index([locationId, status])
@@ -575,6 +586,8 @@ model Supplier {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   goodsReceipts GoodsReceipt[]
+
+  vendorReturns VendorReturn[]
 
   @@map("suppliers")
 }
@@ -782,6 +795,9 @@ model Customer {
 
   orders Order[]
 
+  warranties     Warranty[]
+  warrantyClaims WarrantyClaim[]
+
   @@index([groupId])
   @@index([assignedStaffId])
   @@index([phone])
@@ -865,6 +881,11 @@ model Staff {
 
   createdShipments   Shipment[] @relation("ShipmentCreatedBy")
   deliveredShipments Shipment[] @relation("ShipmentDeliveredBy")
+
+  technicianProfile     Technician?
+  createdServiceJobs    ServiceJob[]    @relation("ServiceJobCreatedBy")
+  createdWarrantyClaims WarrantyClaim[] @relation("WarrantyClaimCreatedBy")
+  createdVendorReturns  VendorReturn[]  @relation("VendorReturnCreatedBy")
 
   @@map("staff")
 }
@@ -1357,6 +1378,9 @@ model Order {
 
   shipments Shipment[]
 
+  serviceJobs ServiceJob[]
+  warranties  Warranty[]
+
   @@index([customerId])
   @@index([status, placedAt])
   @@index([customerPhone])
@@ -1404,6 +1428,9 @@ model OrderLine {
   installationClass InstallationClass? @relation(fields: [installationClassId], references: [id], onDelete: Restrict)
 
   shipmentLines ShipmentLine[]
+
+  serviceJobs ServiceJob[]
+  warranties  Warranty[]
 
   @@index([orderId])
   @@index([variantId])
@@ -1616,4 +1643,329 @@ model ShipmentLineSerial {
   @@id([shipmentLineId, serialUnitId])
   @@index([serialUnitId])
   @@map("shipment_line_serials")
+}
+
+// ============================================================
+// NHÓM 3.7: LẮP ĐẶT, BẢO HÀNH, GỬI TRẢ HÃNG
+// Kỹ thuật viên chưa có tài khoản (staff_id để nối sau).
+// Bảo hành tạo khi giao hàng (PENDING_ACTIVATION), kích hoạt khi lắp xong;
+// đơn không lắp thì kích hoạt ngay khi giao. Không tự kích hoạt nếu chưa lắp.
+// Hết hạn = ends_on < hôm nay (không đổi trạng thái).
+// Đổi máy: chỉ khi lỗi NSX và còn trong hạn đổi; phiếu mới giữ nguyên ends_on.
+// service_job_technicians: thời gian và is_active do TRIGGER đồng bộ; EXCLUDE chống trùng lịch.
+// CHECK, EXCLUDE, unique có điều kiện và trigger nằm trong migration *_after_sales.
+// ============================================================
+
+enum ServiceJobType {
+  INSTALLATION
+  WARRANTY_VISIT
+  REINSTALL
+
+  @@map("service_job_type")
+}
+
+enum ServiceJobStatus {
+  PENDING_SCHEDULE
+  SCHEDULED
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@map("service_job_status")
+}
+
+enum WarrantyStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  REPLACED
+  VOIDED
+
+  @@map("warranty_status")
+}
+
+enum WarrantySource {
+  INSTALLATION
+  DELIVERY
+  REPLACEMENT
+
+  @@map("warranty_source")
+}
+
+enum ClaimStatus {
+  RECEIVED
+  INSPECTING
+  REPAIRING
+  AT_VENDOR
+  RESOLVED
+  REJECTED
+  CANCELLED
+
+  @@map("claim_status")
+}
+
+enum InspectionResult {
+  MANUFACTURER_DEFECT
+  USER_DAMAGE
+  NO_FAULT
+
+  @@map("inspection_result")
+}
+
+enum ClaimResolution {
+  EXCHANGED
+  REPAIRED
+  VENDOR_REPAIRED
+  VENDOR_REPLACED
+  NO_FAULT_FOUND
+  REJECTED
+
+  @@map("claim_resolution")
+}
+
+enum VendorReturnStatus {
+  DRAFT
+  SENT
+  COMPLETED
+  CANCELLED
+
+  @@map("vendor_return_status")
+}
+
+enum VendorReturnOutcome {
+  PENDING
+  REPAIRED
+  REPLACED
+  REFUNDED
+  REJECTED
+
+  @@map("vendor_return_outcome")
+}
+
+/// Kỹ thuật viên (chưa có tài khoản đăng nhập)
+model Technician {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  fullName       String   @map("full_name") @db.VarChar(200)
+  phone          String   @db.VarChar(16)
+  region         Region
+  homeLocationId String?  @map("home_location_id") @db.Uuid
+  /// Nối với tài khoản nhân viên khi cấp quyền sau này
+  staffId        String?  @unique @map("staff_id") @db.Uuid
+  isActive       Boolean  @default(true) @map("is_active")
+  note           String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  homeLocation Location?              @relation(fields: [homeLocationId], references: [id], onDelete: SetNull)
+  staff        Staff?                 @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  jobs         ServiceJobTechnician[]
+
+  @@index([region, isActive])
+  @@map("technicians")
+}
+
+/// Lịch dịch vụ tại nhà khách: lắp đặt, kiểm tra bảo hành, lắp lại
+model ServiceJob {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  code            String           @unique @db.VarChar(30)
+  jobType         ServiceJobType   @map("job_type")
+  status          ServiceJobStatus @default(PENDING_SCHEDULE)
+  orderId         String?          @map("order_id") @db.Uuid
+  /// Dòng lắp đặt (INSTALLATION) của đơn
+  orderLineId     String?          @map("order_line_id") @db.Uuid
+  warrantyClaimId String?          @map("warranty_claim_id") @db.Uuid
+  region          Region
+  contactName     String           @map("contact_name") @db.VarChar(200)
+  contactPhone    String           @map("contact_phone") @db.VarChar(16)
+  address         String
+  scheduledStart  DateTime?        @map("scheduled_start") @db.Timestamptz(3)
+  scheduledEnd    DateTime?        @map("scheduled_end") @db.Timestamptz(3)
+  resultNote      String?          @map("result_note")
+  /// Ảnh sau khi làm: ["url1", "url2"]
+  photos          Json             @default("[]")
+  failedReason    String?          @map("failed_reason")
+  cancelReason    String?          @map("cancel_reason")
+  completedAt     DateTime?        @map("completed_at") @db.Timestamptz(3)
+  cancelledAt     DateTime?        @map("cancelled_at") @db.Timestamptz(3)
+  createdById     String?          @map("created_by_id") @db.Uuid
+  version         Int              @default(1)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order               Order?                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderLine           OrderLine?             @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  warrantyClaim       WarrantyClaim?         @relation(fields: [warrantyClaimId], references: [id], onDelete: Restrict)
+  createdBy           Staff?                 @relation("ServiceJobCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  technicians         ServiceJobTechnician[]
+  serials             ServiceJobSerial[]
+  activatedWarranties Warranty[]
+
+  @@index([status, scheduledStart])
+  @@index([region, scheduledStart])
+  @@index([orderId])
+  @@index([orderLineId])
+  @@index([warrantyClaimId])
+  @@map("service_jobs")
+}
+
+/// Phân công kỹ thuật viên. scheduled_start, scheduled_end, is_active do trigger đồng bộ.
+model ServiceJobTechnician {
+  jobId          String    @map("job_id") @db.Uuid
+  technicianId   String    @map("technician_id") @db.Uuid
+  isLead         Boolean   @default(false) @map("is_lead")
+  scheduledStart DateTime? @map("scheduled_start") @db.Timestamptz(3)
+  scheduledEnd   DateTime? @map("scheduled_end") @db.Timestamptz(3)
+  isActive       Boolean   @default(false) @map("is_active")
+
+  job        ServiceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  technician Technician @relation(fields: [technicianId], references: [id], onDelete: Restrict)
+
+  @@id([jobId, technicianId])
+  @@index([technicianId, isActive])
+  @@map("service_job_technicians")
+}
+
+/// Serial được lắp trong một lịch lắp đặt
+model ServiceJobSerial {
+  jobId        String @map("job_id") @db.Uuid
+  serialUnitId String @map("serial_unit_id") @db.Uuid
+
+  job        ServiceJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  serialUnit SerialUnit @relation(fields: [serialUnitId], references: [id], onDelete: Restrict)
+
+  @@id([jobId, serialUnitId])
+  @@index([serialUnitId])
+  @@map("service_job_serials")
+}
+
+/// Phiếu bảo hành theo serial
+model Warranty {
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  serialUnitId       String         @map("serial_unit_id") @db.Uuid
+  orderId            String?        @map("order_id") @db.Uuid
+  orderLineId        String?        @map("order_line_id") @db.Uuid
+  customerId         String?        @map("customer_id") @db.Uuid
+  /// Số điện thoại dùng để tra cứu
+  phone              String?        @db.VarChar(16)
+  months             Int
+  status             WarrantyStatus @default(PENDING_ACTIVATION)
+  source             WarrantySource
+  startsOn           DateTime?      @map("starts_on") @db.Date
+  endsOn             DateTime?      @map("ends_on") @db.Date
+  activatedAt        DateTime?      @map("activated_at") @db.Timestamptz(3)
+  activatedByJobId   String?        @map("activated_by_job_id") @db.Uuid
+  /// Phiếu cũ khi đổi máy
+  previousWarrantyId String?        @unique @map("previous_warranty_id") @db.Uuid
+  voidedReason       String?        @map("voided_reason")
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  serialUnit          SerialUnit      @relation(fields: [serialUnitId], references: [id], onDelete: Restrict)
+  order               Order?          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderLine           OrderLine?      @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  customer            Customer?       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  activatedByJob      ServiceJob?     @relation(fields: [activatedByJobId], references: [id], onDelete: Restrict)
+  previousWarranty    Warranty?       @relation("WarrantyReplacement", fields: [previousWarrantyId], references: [id], onDelete: Restrict)
+  nextWarranty        Warranty?       @relation("WarrantyReplacement")
+  claims              WarrantyClaim[] @relation("ClaimWarranty")
+  replacementForClaim WarrantyClaim?  @relation("ClaimReplacementWarranty")
+
+  @@index([serialUnitId])
+  @@index([phone])
+  @@index([customerId])
+  @@index([orderId])
+  @@map("warranties")
+}
+
+/// Yêu cầu bảo hành của khách
+model WarrantyClaim {
+  id                      String            @id @default(uuid(7)) @db.Uuid
+  code                    String            @unique @db.VarChar(30)
+  warrantyId              String            @map("warranty_id") @db.Uuid
+  serialUnitId            String            @map("serial_unit_id") @db.Uuid
+  customerId              String?           @map("customer_id") @db.Uuid
+  contactName             String            @map("contact_name") @db.VarChar(200)
+  contactPhone            String            @map("contact_phone") @db.VarChar(16)
+  issueDescription        String            @map("issue_description")
+  photos                  Json              @default("[]")
+  status                  ClaimStatus       @default(RECEIVED)
+  receivedLocationId      String            @map("received_location_id") @db.Uuid
+  receivedAt              DateTime          @default(now()) @map("received_at") @db.Timestamptz(3)
+  /// Tính lúc tiếp nhận: còn trong hạn đổi máy hay không
+  withinExchangeWindow    Boolean           @map("within_exchange_window")
+  inspectionResult        InspectionResult? @map("inspection_result")
+  inspectionNote          String?           @map("inspection_note")
+  inspectedAt             DateTime?         @map("inspected_at") @db.Timestamptz(3)
+  resolution              ClaimResolution?
+  replacementSerialUnitId String?           @map("replacement_serial_unit_id") @db.Uuid
+  replacementWarrantyId   String?           @unique @map("replacement_warranty_id") @db.Uuid
+  resolutionNote          String?           @map("resolution_note")
+  resolvedAt              DateTime?         @map("resolved_at") @db.Timestamptz(3)
+  createdById             String?           @map("created_by_id") @db.Uuid
+  version                 Int               @default(1)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  warranty              Warranty           @relation("ClaimWarranty", fields: [warrantyId], references: [id], onDelete: Restrict)
+  serialUnit            SerialUnit         @relation("ClaimSerial", fields: [serialUnitId], references: [id], onDelete: Restrict)
+  customer              Customer?          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  receivedLocation      Location           @relation(fields: [receivedLocationId], references: [id], onDelete: Restrict)
+  replacementSerialUnit SerialUnit?        @relation("ClaimReplacementSerial", fields: [replacementSerialUnitId], references: [id], onDelete: Restrict)
+  replacementWarranty   Warranty?          @relation("ClaimReplacementWarranty", fields: [replacementWarrantyId], references: [id], onDelete: Restrict)
+  createdBy             Staff?             @relation("WarrantyClaimCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  serviceJobs           ServiceJob[]
+  vendorReturnItems     VendorReturnItem[]
+
+  @@index([warrantyId])
+  @@index([serialUnitId])
+  @@index([status, receivedAt])
+  @@index([contactPhone])
+  @@map("warranty_claims")
+}
+
+/// Phiếu gửi máy lỗi về nhà cung cấp
+model VendorReturn {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  code           String             @unique @db.VarChar(30)
+  supplierId     String             @map("supplier_id") @db.Uuid
+  fromLocationId String             @map("from_location_id") @db.Uuid
+  status         VendorReturnStatus @default(DRAFT)
+  trackingCode   String?            @map("tracking_code") @db.VarChar(60)
+  note           String?
+  sentAt         DateTime?          @map("sent_at") @db.Timestamptz(3)
+  completedAt    DateTime?          @map("completed_at") @db.Timestamptz(3)
+  cancelledAt    DateTime?          @map("cancelled_at") @db.Timestamptz(3)
+  createdById    String?            @map("created_by_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  supplier     Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  fromLocation Location           @relation(fields: [fromLocationId], references: [id], onDelete: Restrict)
+  createdBy    Staff?             @relation("VendorReturnCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items        VendorReturnItem[]
+
+  @@index([status, sentAt])
+  @@map("vendor_returns")
+}
+
+model VendorReturnItem {
+  id                      String              @id @default(uuid(7)) @db.Uuid
+  vendorReturnId          String              @map("vendor_return_id") @db.Uuid
+  serialUnitId            String              @map("serial_unit_id") @db.Uuid
+  warrantyClaimId         String?             @map("warranty_claim_id") @db.Uuid
+  outcome                 VendorReturnOutcome @default(PENDING)
+  replacementSerialUnitId String?             @map("replacement_serial_unit_id") @db.Uuid
+  /// Số tiền hãng hoàn (khi REFUNDED)
+  refundAmount            BigInt?             @map("refund_amount")
+  resolvedAt              DateTime?           @map("resolved_at") @db.Timestamptz(3)
+  note                    String?
+
+  vendorReturn          VendorReturn   @relation(fields: [vendorReturnId], references: [id], onDelete: Cascade)
+  serialUnit            SerialUnit     @relation("VendorReturnSerial", fields: [serialUnitId], references: [id], onDelete: Restrict)
+  warrantyClaim         WarrantyClaim? @relation(fields: [warrantyClaimId], references: [id], onDelete: Restrict)
+  replacementSerialUnit SerialUnit?    @relation("VendorReturnReplacementSerial", fields: [replacementSerialUnitId], references: [id], onDelete: Restrict)
+
+  @@unique([vendorReturnId, serialUnitId])
+  @@index([serialUnitId])
+  @@index([warrantyClaimId])
+  @@map("vendor_return_items")
 }
