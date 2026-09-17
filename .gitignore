@@ -17,3 +17,6 @@ dist
 .DS_Store
 # Code do Prisma sinh ra (tạo lại bằng db:generate)
 packages/database/src/generated
+
+# Next.js tự sinh
+next-env.d.ts
