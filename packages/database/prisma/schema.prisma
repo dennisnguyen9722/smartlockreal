@@ -48,6 +48,8 @@ model Location {
   transfersIn   StockTransfer[] @relation("TransferTo")
   stocktakes    Stocktake[]
 
+  fulfillmentOrders Order[]
+
   @@map("locations")
 }
 
@@ -182,6 +184,8 @@ model InstallationClass {
   rates    InstallationRate[]
   products Product[]
 
+  orderLines OrderLine[]
+
   @@map("installation_classes")
 }
 
@@ -311,6 +315,10 @@ model ProductVariant {
   saleItems     SaleCampaignItem[]
   giftTriggers  GiftTrigger[]
   giftItems     GiftItem[]
+
+  /// Thuế suất VAT theo phần vạn (1000 = 10%)
+  vatRateBps Int         @default(1000) @map("vat_rate_bps")
+  orderLines OrderLine[]
 
   @@unique([productId, optionKey])
   @@map("product_variants")
@@ -514,6 +522,8 @@ model StockReservation {
   updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   stockLevel StockLevel @relation(fields: [variantId, locationId], references: [variantId, locationId], onDelete: Restrict)
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([variantId, locationId])
   @@index([orderId])
@@ -766,6 +776,8 @@ model Customer {
   addresses     CustomerAddress[]
   contacts      CustomerContact[]
 
+  orders Order[]
+
   @@index([groupId])
   @@index([assignedStaffId])
   @@index([phone])
@@ -841,6 +853,11 @@ model Staff {
   saleCampaigns  SaleCampaign[]  @relation("SaleCampaignCreatedBy")
   vouchers       Voucher[]       @relation("VoucherCreatedBy")
   giftPromotions GiftPromotion[] @relation("GiftPromotionCreatedBy")
+
+  createdOrders           Order[]              @relation("OrderCreatedBy")
+  orderStatusChanges      OrderStatusHistory[]
+  receivedPayments        Payment[]            @relation("PaymentReceivedBy")
+  matchedBankTransactions BankTransaction[]    @relation("BankTransactionMatchedBy")
 
   @@map("staff")
 }
@@ -1004,6 +1021,8 @@ model SaleCampaignItem {
   campaign SaleCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
+  orderLines OrderLine[]
+
   @@unique([campaignId, variantId])
   @@index([variantId, isPublished, startsAt, endsAt])
   @@map("sale_campaign_items")
@@ -1078,6 +1097,8 @@ model VoucherRedemption {
 
   voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
 
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
   @@index([voucherId, phone])
   @@index([orderId])
   @@map("voucher_redemptions")
@@ -1130,4 +1151,347 @@ model GiftItem {
 
   @@id([promotionId, variantId])
   @@map("gift_items")
+}
+
+// ============================================================
+// NHÓM 3.5A: ĐƠN HÀNG VÀ THANH TOÁN
+// Giá trên dòng đơn là giá CHƯA VAT (vat_mode = EXCLUSIVE_ON_REQUEST):
+// VAT chỉ cộng khi khách yêu cầu hóa đơn. Thuế tính và làm tròn theo TỪNG DÒNG.
+// Kết quả VNPay chỉ tin theo IPN đã kiểm tra chữ ký, không tin trang quay về.
+// CHECK, unique có điều kiện, trigger và hàm next_document_number nằm trong migration *_orders.
+// order_status_history bất biến (hàm forbid_modification dùng chung). Tổng tiền của đơn phải khớp tổng các dòng: API chịu trách nhiệm.
+// ============================================================
+
+enum SalesChannel {
+  WEBSITE
+  ZALO
+  STORE
+  PROJECT
+
+  @@map("sales_channel")
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  FULFILLING
+  COMPLETED
+  CANCELLED
+
+  @@map("order_status")
+}
+
+enum FulfillmentType {
+  /// Mua tại showroom, mang về ngay
+  TAKE_AWAY
+  /// Giao hàng
+  DELIVERY
+  /// Đặt trước, đến showroom nhận
+  STORE_PICKUP
+
+  @@map("fulfillment_type")
+}
+
+enum VatMode {
+  /// Giá chưa VAT, chỉ cộng VAT khi khách yêu cầu hóa đơn
+  EXCLUSIVE_ON_REQUEST
+  /// Giá đã gồm VAT (dự phòng nếu công ty đổi chính sách)
+  INCLUSIVE
+
+  @@map("vat_mode")
+}
+
+enum OrderLineType {
+  PRODUCT
+  BUNDLE
+  BUNDLE_COMPONENT
+  INSTALLATION
+  GIFT
+
+  @@map("order_line_type")
+}
+
+enum PriceSource {
+  RETAIL
+  REGION
+  GROUP_PERCENT
+  GROUP_FIXED
+  QUANTITY_TIER
+  FLASH_SALE
+  QUOTE
+  INSTALLATION_RATE
+  MANUAL
+  ZERO
+
+  @@map("price_source")
+}
+
+enum PaymentMethod {
+  CASH
+  COD
+  BANK_TRANSFER
+  VNPAY
+
+  @@map("payment_method")
+}
+
+enum PaymentPurpose {
+  DEPOSIT
+  BALANCE
+  FULL
+  REFUND
+
+  @@map("payment_purpose")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+  CANCELLED
+
+  @@map("payment_status")
+}
+
+enum BankMatchStatus {
+  UNMATCHED
+  MATCHED
+  IGNORED
+
+  @@map("bank_match_status")
+}
+
+/// Bộ đếm mã chứng từ theo tiền tố và kỳ (vd: DH + 260917). Dùng qua hàm next_document_number().
+model DocumentSequence {
+  prefix    String   @db.VarChar(10)
+  periodKey String   @map("period_key") @db.VarChar(8)
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([prefix, periodKey])
+  @@map("document_sequences")
+}
+
+/// Đơn hàng: chụp lại thông tin khách, địa chỉ, hóa đơn tại thời điểm đặt
+model Order {
+  id                    String          @id @default(uuid(7)) @db.Uuid
+  code                  String          @unique @db.VarChar(30)
+  channel               SalesChannel
+  status                OrderStatus     @default(PENDING_CONFIRMATION)
+  fulfillmentType       FulfillmentType @map("fulfillment_type")
+  /// Null chỉ khi mua mang về mà khách không để lại thông tin
+  customerId            String?         @map("customer_id") @db.Uuid
+  customerName          String?         @map("customer_name") @db.VarChar(200)
+  customerPhone         String?         @map("customer_phone") @db.VarChar(16)
+  /// Showroom xuất hàng: bắt buộc với TAKE_AWAY và STORE_PICKUP
+  fulfillmentLocationId String?         @map("fulfillment_location_id") @db.Uuid
+
+  // Địa chỉ giao hàng (bắt buộc với DELIVERY)
+  shipRecipientName  String? @map("ship_recipient_name") @db.VarChar(200)
+  shipRecipientPhone String? @map("ship_recipient_phone") @db.VarChar(16)
+  shipProvinceCode   String? @map("ship_province_code") @db.VarChar(10)
+  shipProvinceName   String? @map("ship_province_name") @db.VarChar(100)
+  shipWardCode       String? @map("ship_ward_code") @db.VarChar(10)
+  shipWardName       String? @map("ship_ward_name") @db.VarChar(100)
+  shipStreet         String? @map("ship_street")
+  /// Khu vực lắp đặt/tự giao; null nếu ngoài TP.HCM và Hà Nội
+  shipRegion         Region? @map("ship_region")
+
+  // Thuế và hóa đơn
+  vatMode             VatMode @default(EXCLUSIVE_ON_REQUEST) @map("vat_mode")
+  vatInvoiceRequested Boolean @default(false) @map("vat_invoice_requested")
+  invoiceBuyerName    String? @map("invoice_buyer_name") @db.VarChar(200)
+  invoiceCompanyName  String? @map("invoice_company_name") @db.VarChar(255)
+  invoiceTaxCode      String? @map("invoice_tax_code") @db.VarChar(20)
+  invoiceAddress      String? @map("invoice_address")
+  invoiceEmail        String? @map("invoice_email") @db.VarChar(200)
+
+  // Tiền (VND)
+  subtotal        BigInt @default(0)
+  discountTotal   BigInt @default(0) @map("discount_total")
+  shippingFee     BigInt @default(0) @map("shipping_fee")
+  vatTotal        BigInt @default(0) @map("vat_total")
+  grandTotal      BigInt @default(0) @map("grand_total")
+  /// Đã thu (sau khi trừ hoàn tiền)
+  paidTotal       BigInt @default(0) @map("paid_total")
+  depositRequired BigInt @default(0) @map("deposit_required")
+
+  /// Chống đặt trùng khi khách bấm nhiều lần
+  idempotencyKey  String? @unique @map("idempotency_key") @db.VarChar(64)
+  customerNote    String? @map("customer_note")
+  internalNote    String? @map("internal_note")
+  needsAttention  Boolean @default(false) @map("needs_attention")
+  attentionReason String? @map("attention_reason") @db.VarChar(200)
+  placedIp        String? @map("placed_ip") @db.Inet
+  userAgent       String? @map("user_agent") @db.VarChar(500)
+  /// Nhân viên tạo đơn; null với đơn khách tự đặt
+  createdById     String? @map("created_by_id") @db.Uuid
+  /// Khóa lạc quan: tăng 1 mỗi lần cập nhật
+  version         Int     @default(1)
+
+  placedAt     DateTime  @default(now()) @map("placed_at") @db.Timestamptz(3)
+  confirmedAt  DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(3)
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  cancelReason String?   @map("cancel_reason")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer            Customer?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  fulfillmentLocation Location?            @relation(fields: [fulfillmentLocationId], references: [id], onDelete: Restrict)
+  createdBy           Staff?               @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lines               OrderLine[]
+  payments            Payment[]
+  statusHistory       OrderStatusHistory[]
+  reservations        StockReservation[]
+  voucherRedemptions  VoucherRedemption[]
+
+  @@index([customerId])
+  @@index([status, placedAt])
+  @@index([customerPhone])
+  @@index([channel, placedAt])
+  @@map("orders")
+}
+
+/// Dòng đơn: giá, nguồn giá, voucher phân bổ và thuế được chụp lại
+model OrderLine {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  orderId             String        @map("order_id") @db.Uuid
+  /// Dòng cha: combo của BUNDLE_COMPONENT, khóa của INSTALLATION
+  parentLineId        String?       @map("parent_line_id") @db.Uuid
+  lineType            OrderLineType @map("line_type")
+  /// Null chỉ với INSTALLATION
+  variantId           String?       @map("variant_id") @db.Uuid
+  sku                 String?       @db.VarChar(64)
+  name                String        @db.VarChar(255)
+  quantity            Int
+  /// Giá niêm yết tại thời điểm bán (để hiển thị "trị giá")
+  listPrice           BigInt        @map("list_price")
+  /// Giá bán cuối cùng mỗi đơn vị, CHƯA VAT
+  unitPrice           BigInt        @map("unit_price")
+  priceSource         PriceSource   @map("price_source")
+  saleCampaignItemId  String?       @map("sale_campaign_item_id") @db.Uuid
+  /// unit_price x quantity
+  lineSubtotal        BigInt        @map("line_subtotal")
+  /// Phần voucher phân bổ cho dòng này
+  discountAllocated   BigInt        @default(0) @map("discount_allocated")
+  /// line_subtotal - discount_allocated
+  lineTotal           BigInt        @map("line_total")
+  vatRateBps          Int           @map("vat_rate_bps")
+  vatAmount           BigInt        @default(0) @map("vat_amount")
+  installationClassId String?       @map("installation_class_id") @db.Uuid
+  installationRegion  Region?       @map("installation_region")
+  /// Số lượng đã giao (cập nhật khi giao hàng)
+  quantityShipped     Int           @default(0) @map("quantity_shipped")
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  parentLine        OrderLine?         @relation("OrderLineTree", fields: [parentLineId], references: [id], onDelete: Cascade)
+  childLines        OrderLine[]        @relation("OrderLineTree")
+  variant           ProductVariant?    @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  saleCampaignItem  SaleCampaignItem?  @relation(fields: [saleCampaignItemId], references: [id], onDelete: Restrict)
+  installationClass InstallationClass? @relation(fields: [installationClassId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([variantId])
+  @@index([parentLineId])
+  @@map("order_lines")
+}
+
+/// Lịch sử trạng thái đơn (bất biến, có trigger chặn sửa/xóa)
+model OrderStatusHistory {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  orderId    String       @map("order_id") @db.Uuid
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus  @map("to_status")
+  note       String?
+  staffId    String?      @map("staff_id") @db.Uuid
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  order Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  staff Staff? @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+/// Mỗi lần thu hoặc hoàn tiền
+model Payment {
+  id                    String         @id @default(uuid(7)) @db.Uuid
+  orderId               String         @map("order_id") @db.Uuid
+  method                PaymentMethod
+  purpose               PaymentPurpose
+  status                PaymentStatus  @default(PENDING)
+  /// Luôn dương; hoàn tiền xác định bằng purpose = REFUND
+  amount                BigInt
+  /// Nội dung chuyển khoản riêng cho lần thu (VietQR)
+  transferContent       String?        @unique @map("transfer_content") @db.VarChar(40)
+  /// Mã giao dịch do hệ thống gửi cổng thanh toán (vnp_TxnRef)
+  providerTxnRef        String?        @unique @map("provider_txn_ref") @db.VarChar(64)
+  /// Mã giao dịch do cổng thanh toán trả về
+  providerTransactionNo String?        @map("provider_transaction_no") @db.VarChar(64)
+  providerResponseCode  String?        @map("provider_response_code") @db.VarChar(10)
+  expiresAt             DateTime?      @map("expires_at") @db.Timestamptz(3)
+  paidAt                DateTime?      @map("paid_at") @db.Timestamptz(3)
+  receivedById          String?        @map("received_by_id") @db.Uuid
+  note                  String?
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order            Order                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  receivedBy       Staff?                @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  bankTransactions BankTransaction[]
+  webhookEvents    PaymentWebhookEvent[]
+
+  @@index([orderId])
+  @@index([status, expiresAt])
+  @@map("payments")
+}
+
+/// Giao dịch ngân hàng nhận về để đối chiếu chuyển khoản
+model BankTransaction {
+  id               String          @id @default(uuid(7)) @db.Uuid
+  /// Nguồn dữ liệu (dịch vụ theo dõi tài khoản ngân hàng)
+  provider         String          @db.VarChar(40)
+  externalId       String          @map("external_id") @db.VarChar(100)
+  accountNumber    String?         @map("account_number") @db.VarChar(30)
+  amount           BigInt
+  content          String
+  transactedAt     DateTime        @map("transacted_at") @db.Timestamptz(3)
+  matchStatus      BankMatchStatus @default(UNMATCHED) @map("match_status")
+  matchedPaymentId String?         @map("matched_payment_id") @db.Uuid
+  matchedById      String?         @map("matched_by_id") @db.Uuid
+  rawPayload       Json            @map("raw_payload")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  matchedPayment Payment? @relation(fields: [matchedPaymentId], references: [id], onDelete: Restrict)
+  matchedBy      Staff?   @relation("BankTransactionMatchedBy", fields: [matchedById], references: [id], onDelete: Restrict)
+
+  @@unique([provider, externalId])
+  @@index([matchStatus, transactedAt])
+  @@map("bank_transactions")
+}
+
+/// Thông báo từ cổng thanh toán (IPN); mỗi thông báo chỉ xử lý một lần
+model PaymentWebhookEvent {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  provider       String    @db.VarChar(40)
+  /// Khóa chống xử lý trùng, vd: vnp_TxnRef + vnp_TransactionNo
+  eventKey       String    @map("event_key") @db.VarChar(200)
+  paymentId      String?   @map("payment_id") @db.Uuid
+  signatureValid Boolean   @map("signature_valid")
+  payload        Json
+  /// Kết quả xử lý: OK, AMOUNT_MISMATCH, ALREADY_CONFIRMED...
+  result         String?   @db.VarChar(40)
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, eventKey])
+  @@index([paymentId])
+  @@map("payment_webhook_events")
 }
