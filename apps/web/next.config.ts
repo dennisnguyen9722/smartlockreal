@@ -8,11 +8,12 @@ const rootEnvFile = path.resolve(process.cwd(), '../../.env');
 if (existsSync(rootEnvFile)) {
   process.loadEnvFile(rootEnvFile);
 }
-console.log('[next.config] NEXT_PUBLIC_API_URL =', process.env.NEXT_PUBLIC_API_URL ?? '(chưa có)');
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // @ktm/ui xuất file .tsx gốc, Next.js cần tự biên dịch
+  transpilePackages: ['@ktm/ui'],
 };
 
 export default nextConfig;

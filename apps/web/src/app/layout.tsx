@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import '@ktm/ui/globals.css';
 
 export const metadata: Metadata = {
     title: 'Khóa Thông Minh Chính Hãng',

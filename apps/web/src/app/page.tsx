@@ -1,5 +1,6 @@
 import { connection } from 'next/server';
 import { formatVnd } from '@ktm/shared';
+import { cn } from '@ktm/ui/lib/utils';
 
 interface Health {
     status: string;
@@ -23,10 +24,15 @@ export default async function HomePage() {
     const health = await getHealth();
 
     return (
-        <main style={{ padding: 32, fontFamily: 'system-ui, sans-serif' }}>
-            <h1>Khóa Thông Minh Chính Hãng</h1>
-            <p>Ví dụ định dạng giá: {formatVnd(12_500_000)}</p>
-            <p>
+        <main className="mx-auto max-w-2xl space-y-4 p-8">
+            <h1 className="text-3xl font-bold tracking-tight">Khóa Thông Minh Chính Hãng</h1>
+            <p className="text-muted-foreground">Ví dụ định dạng giá: {formatVnd(12_500_000)}</p>
+            <p
+                className={cn(
+                    'inline-block rounded-lg px-3 py-1 text-sm font-medium',
+                    health ? 'bg-primary text-primary-foreground' : 'bg-destructive text-white',
+                )}
+            >
                 API:{' '}
                 {health
                     ? `✅ ${health.status}, database ${health.database} (${health.databaseLatencyMs}ms)`
