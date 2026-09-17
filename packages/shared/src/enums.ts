@@ -35,3 +35,12 @@ export const RealtimeEvent = {
   SYSTEM_PING: 'system:ping',
 } as const;
 export type RealtimeEvent = (typeof RealtimeEvent)[keyof typeof RealtimeEvent];
+
+/** Tiền tố khóa Redis của BullMQ, tách biệt với khóa của Socket.IO */
+export const QUEUE_PREFIX = 'ktm';
+
+/** Tên hàng đợi. KHÔNG dùng dấu ":" vì BullMQ dùng nó làm ký tự phân cách. */
+export const QueueName = {
+  SYSTEM: 'system', // Job hệ thống, dùng để thử nghiệm và bảo trì
+} as const;
+export type QueueName = (typeof QueueName)[keyof typeof QueueName];

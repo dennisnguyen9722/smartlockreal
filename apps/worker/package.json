@@ -1,0 +1,22 @@
+{
+  "name": "@ktm/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json && concurrently -k -n tsc,worker -c blue,magenta \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node --env-file=../../.env --watch dist/main.js\"",
+    "start": "node --env-file=../../.env dist/main.js"
+  },
+  "dependencies": {
+    "@ktm/shared": "workspace:*",
+    "bullmq": "^6.3.6",
+    "ioredis": "^6.0.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.5",
+    "concurrently": "^10.0.5",
+    "typescript": "~5.9.3"
+  }
+}
