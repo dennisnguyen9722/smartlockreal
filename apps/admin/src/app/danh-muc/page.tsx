@@ -23,6 +23,7 @@ import { useAuth } from '@/components/auth-provider';
 import { ApiError } from '@/lib/api';
 import { useApiMutation, useApiQuery } from '@/lib/hooks';
 import { SlugField } from '@/components/slug-field';
+import { SpecPanel } from '@/components/spec-panel';
 
 interface CategoryNode {
   id: string;
@@ -49,6 +50,8 @@ export default function CategoryPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<CategoryNode | null>(null);
+
+  const [selected, setSelected] = useState<CategoryNode | null>(null);
 
   const query = useApiQuery<CategoryNode[]>(
     ['categories', 'tree'],
@@ -184,7 +187,11 @@ export default function CategoryPage() {
     return (
       <div key={node.id}>
         <div
-          className="flex items-center gap-2 border-b py-2.5 pr-3 transition-colors hover:bg-muted/50"
+          onClick={() => setSelected(node)}
+          className={cn(
+            'flex cursor-pointer items-center gap-2 border-b py-2.5 pr-3 transition-colors',
+            selected?.id === node.id ? 'bg-primary/10' : 'hover:bg-muted/50',
+          )}
           style={{ paddingLeft: `${depth * 24 + 12}px` }}
         >
           <button
@@ -249,34 +256,50 @@ export default function CategoryPage() {
         }
       />
 
-      {query.isPending ? (
-        <LoadingRows />
-      ) : query.isError ? (
-        <ErrorState message={query.error.message} />
-      ) : tree.length === 0 ? (
-        <EmptyState
-          message="Chưa có danh mục nào"
-          action={canManage ? <Button onClick={() => openCreate()}>Thêm danh mục đầu tiên</Button> : undefined}
-        />
-      ) : (
-        <div className="overflow-hidden rounded-lg border">
-          <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2 text-sm">
-            <span className="font-medium">{flatList.length} danh mục</span>
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                onClick={() => setExpanded(new Set(flatList.map((item) => item.node.id)))}
-              >
-                Mở tất cả
-              </Button>
-              <Button variant="ghost" onClick={() => setExpanded(new Set())}>
-                Thu gọn
-              </Button>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div>
+          {query.isPending ? (
+            <LoadingRows />
+          ) : query.isError ? (
+            <ErrorState message={query.error.message} />
+          ) : tree.length === 0 ? (
+            <EmptyState
+              message="Chưa có danh mục nào"
+              action={
+                canManage ? <Button onClick={() => openCreate()}>Thêm danh mục đầu tiên</Button> : undefined
+              }
+            />
+          ) : (
+            <div className="overflow-hidden rounded-lg border">
+              <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2 text-sm">
+                <span className="font-medium">{flatList.length} danh mục</span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setExpanded(new Set(flatList.map((item) => item.node.id)))}
+                  >
+                    Mở tất cả
+                  </Button>
+                  <Button variant="ghost" onClick={() => setExpanded(new Set())}>
+                    Thu gọn
+                  </Button>
+                </div>
+              </div>
+              {tree.map((node) => renderNode(node, 0))}
             </div>
-          </div>
-          {tree.map((node) => renderNode(node, 0))}
+          )}
         </div>
-      )}
+
+        <div className="lg:sticky lg:top-20 lg:self-start">
+          {selected ? (
+            <SpecPanel key={selected.id} categoryId={selected.id} categoryName={selected.name} />
+          ) : (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Bấm vào một danh mục để xem và quản lý thông số kỹ thuật của nó.
+            </div>
+          )}
+        </div>
+      </div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-lg">
