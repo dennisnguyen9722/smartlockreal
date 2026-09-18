@@ -4,12 +4,15 @@ import { z } from 'zod';
 import { ErrorCode, type SystemHelloJobData } from '@ktm/shared';
 import { AppException } from '../common/errors/app.exception';
 import { SYSTEM_QUEUE } from '../queue/queue.module';
+import { Permission } from '@ktm/shared';
+import { RequirePermissions } from '../auth/auth.decorators';
 
 const AddSystemJobSchema = z.object({
   notifySocketId: z.string().min(1).max(64).optional(),
 });
 
 /** Endpoint hỗ trợ phát triển. KHÔNG được đăng ký ở production. */
+@RequirePermissions(Permission.SETTING_MANAGE)
 @Controller('dev')
 export class DevController {
   constructor(@Inject(SYSTEM_QUEUE) private readonly systemQueue: Queue) {}

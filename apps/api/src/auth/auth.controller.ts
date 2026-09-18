@@ -1,12 +1,14 @@
-import { Body, Controller, HttpCode, HttpStatus, Inject, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Inject, Post, Req, Res, Get } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { ErrorCode } from '@ktm/shared';
+import { ErrorCode, Permission, RolePermissions } from '@ktm/shared';
 import { AppException } from '../common/errors/app.exception';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
 import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH, REFRESH_TOKEN_TTL_SECONDS } from './auth.constants';
 import { AuthService, type AuthResult } from './auth.service';
+import { CurrentUser, Public } from './auth.decorators';
+import type { AuthUser } from '../common/types/express';
 
 const LoginSchema = z.object({
   email: z.string().min(3).max(200),
@@ -20,6 +22,13 @@ export class AuthController {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
+  @Get('me')
+  async me(@CurrentUser() user: AuthUser) {
+    const staff = await this.auth.getProfile(user.id);
+    return { ...staff, permissions: RolePermissions[user.role] };
+  }
+
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -36,6 +45,7 @@ export class AuthController {
     return this.respond(res, result);
   }
 
+  @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -44,6 +54,7 @@ export class AuthController {
     return this.respond(res, result);
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

@@ -12,6 +12,8 @@ import {
 } from './auth.constants';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
+import { Redis } from 'ioredis';
+import { REDIS } from '../redis/redis.module';
 
 export interface RequestContext {
   ip?: string;
@@ -31,6 +33,7 @@ export class AuthService {
 
   constructor(
     @Inject(PRISMA) private readonly db: PrismaClient,
+    @Inject(REDIS) private readonly redis: Redis,
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
   ) {}
@@ -97,6 +100,17 @@ export class AuthService {
     if (session) {
       await this.revokeFamily(session.familyId, 'LOGOUT');
     }
+  }
+
+  async getProfile(staffId: string) {
+    const staff = await this.db.staff.findUnique({
+      where: { id: staffId },
+      select: { id: true, email: true, fullName: true, role: true, lastLoginAt: true },
+    });
+    if (!staff || staff.role === undefined) {
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+    return staff;
   }
 
   /** Tạo phiên mới; nếu là làm mới token thì thu hồi phiên cũ trong cùng transaction */
@@ -167,9 +181,27 @@ export class AuthService {
   }
 
   private async revokeFamily(familyId: string, reason: string): Promise<void> {
+    const sessions = await this.db.staffSession.findMany({
+      where: { familyId, revokedAt: null },
+      select: { id: true },
+    });
+    if (sessions.length === 0) return;
+
     await this.db.staffSession.updateMany({
       where: { familyId, revokedAt: null },
       data: { revokedAt: new Date(), revokeReason: reason },
     });
+
+    // Chặn access token còn hạn của các phiên này; tự hết sau 15 phút
+    const pipeline = this.redis.pipeline();
+    for (const session of sessions) {
+      pipeline.set(AuthService.revokedKey(session.id), reason, 'EX', ACCESS_TOKEN_TTL_SECONDS);
+    }
+    await pipeline.exec();
+  }
+
+    /** Khóa Redis đánh dấu một phiên đã bị thu hồi */
+  static revokedKey(sessionId: string): string {
+    return `revoked_session:${sessionId}`;
   }
 }

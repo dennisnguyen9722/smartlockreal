@@ -3,7 +3,9 @@ import type { PrismaClient } from '@ktm/database';
 import { ErrorCode } from '@ktm/shared';
 import { AppException } from '../common/errors/app.exception';
 import { PRISMA } from '../database/database.module';
+import { Public } from '../auth/auth.decorators';
 
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(@Inject(PRISMA) private readonly db: PrismaClient) {}
