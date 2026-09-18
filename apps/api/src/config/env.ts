@@ -29,16 +29,12 @@ const EnvSchema = z
       .optional()
       .transform((value) => value || undefined),
 
-    JWT_CUSTOMER_ACCESS_SECRET: jwtSecret,
-    JWT_CUSTOMER_REFRESH_SECRET: jwtSecret,
     JWT_STAFF_ACCESS_SECRET: jwtSecret,
     JWT_STAFF_REFRESH_SECRET: jwtSecret,
     
   })
   .superRefine((env, ctx) => {
     const secrets = [
-      env.JWT_CUSTOMER_ACCESS_SECRET,
-      env.JWT_CUSTOMER_REFRESH_SECRET,
       env.JWT_STAFF_ACCESS_SECRET,
       env.JWT_STAFF_REFRESH_SECRET,
     ];
@@ -46,7 +42,7 @@ const EnvSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['JWT_*'],
-        message: '4 JWT secret phải khác nhau',
+        message: '2 JWT secret phải khác nhau',
       });
     }
     if (env.NODE_ENV === 'production' && !env.COOKIE_DOMAIN) {
