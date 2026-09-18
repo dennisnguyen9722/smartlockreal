@@ -168,3 +168,15 @@ Yêu cầu quyền bằng `@RequirePermissions(Permission.X)`.
 - Tên file là mã băm nội dung nên ảnh trùng chỉ lưu một lần, và cache được 1 năm.
 - Ảnh tải lên luôn được chuyển sang WebP và **xóa dữ liệu ẩn** (GPS, thông tin máy chụp).
 - Thư mục ảnh **không nằm trong Git**, cần sao lưu riêng khi triển khai.
+
+## Ép phiên bản thư viện con (pnpm overrides)
+
+Mục `pnpm.overrides` trong `package.json` gốc ép phiên bản vá lỗi cho các thư viện con:
+
+| Thư viện | Vì sao |
+|---|---|
+| `deepmerge-ts`, `mysql2` | Thư viện con của bộ lệnh Prisma (chỉ dùng khi phát triển) |
+| `uuid` | Thư viện con của `exceljs` |
+
+Sau mỗi lần thêm thư viện mới, chạy `pnpm audit --audit-level high` để kiểm tra.
+Khi ép phiên bản, phải chạy lại phần nào dùng thư viện đó để chắc chắn không hỏng.

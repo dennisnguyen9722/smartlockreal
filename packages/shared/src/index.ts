@@ -8,3 +8,4 @@ export * from './schemas/catalog';
 export * from './schemas/spec';
 export * from './schemas/product';
 export * from './schemas/import';
+export * from './navigation';
