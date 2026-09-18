@@ -16,14 +16,14 @@ import { PermissionsGuard } from './auth/permissions.guard';
 import { RateLimitGuard } from './common/rate-limit/rate-limit.guard';
 import { AuditModule } from './audit/audit.module';
 import { CatalogModule } from './catalog/catalog.module';
-
+import { MediaModule } from './media/media.module';
 
 @Module({})
 export class AppModule {
   static register(env: Env): DynamicModule {
     return {
       module: AppModule,
-      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, QueueModule, RealtimeModule, AuditModule, AuthModule, CatalogModule],
+      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, QueueModule, RealtimeModule, AuditModule, AuthModule, CatalogModule, MediaModule],
       controllers: [
         HealthController,
         // Endpoint phát triển chỉ tồn tại ngoài production

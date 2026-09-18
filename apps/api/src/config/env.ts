@@ -31,6 +31,10 @@ const EnvSchema = z
 
     JWT_STAFF_ACCESS_SECRET: jwtSecret,
     JWT_STAFF_REFRESH_SECRET: jwtSecret,
+
+    MEDIA_ROOT: z.string().min(1).default('./var/media'),
+    MEDIA_PUBLIC_URL: z.string().regex(/^https?:\/\//, 'phải bắt đầu bằng http:// hoặc https://'),
+    MEDIA_MAX_SIZE_MB: z.coerce.number().int().min(1).max(50).default(10),
     
   })
   .superRefine((env, ctx) => {

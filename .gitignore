@@ -20,3 +20,6 @@ packages/database/src/generated
 
 # Next.js tự sinh
 next-env.d.ts
+
+# Ảnh tải lên (sao lưu riêng, không đưa vào Git)
+var/media

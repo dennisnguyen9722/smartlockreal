@@ -159,3 +159,12 @@ Yêu cầu quyền bằng `@RequirePermissions(Permission.X)`.
 | Tài khoản bị khóa do thử sai nhiều | `pnpm --filter @ktm/api staff reset-password <email>` |
 | `Type 'Record<string, unknown>' is not assignable to ... InputJsonValue` | Dùng `toJsonSafe()` trước khi ghi vào cột JSON |
 | Dừng dịch vụ | Luôn nhấn `Ctrl + C` trong tab đang chạy, không đóng thẳng cửa sổ Terminal |
+
+## Ảnh và file tải lên
+
+- Ảnh lưu trong `MEDIA_ROOT` (đặt **đường dẫn tuyệt đối**, vì đường dẫn tương đối tính theo
+  thư mục chạy lệnh, mà mỗi app chạy ở thư mục khác nhau).
+- Đường dẫn file: `<năm>/<tháng>/<mã băm SHA-256>.webp`, kèm bản `_md` (900px) và `_sm` (400px).
+- Tên file là mã băm nội dung nên ảnh trùng chỉ lưu một lần, và cache được 1 năm.
+- Ảnh tải lên luôn được chuyển sang WebP và **xóa dữ liệu ẩn** (GPS, thông tin máy chụp).
+- Thư mục ảnh **không nằm trong Git**, cần sao lưu riêng khi triển khai.

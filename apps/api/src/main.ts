@@ -10,6 +10,7 @@ import { AppIoAdapter } from './realtime/app-io.adapter';
 import { createAdapter } from '@socket.io/redis-adapter';
 import type { Redis } from 'ioredis';
 import { REDIS, REDIS_SUBSCRIBER } from './redis/redis.module';
+import path from 'node:path';
 
 async function bootstrap() {
   const env = loadEnv();
@@ -23,6 +24,17 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
+
+    // Ảnh là file tĩnh, phục vụ trực tiếp. Production nên để Nginx làm việc này.
+  app.useStaticAssets(path.resolve(env.MEDIA_ROOT), {
+    prefix: '/media',
+    // Tên file chứa mã băm nội dung nên đổi ảnh là đổi tên: cache thoải mái 1 năm
+    maxAge: '1y',
+    immutable: true,
+    index: false,
+    redirect: false,
+  });
+  
   app.enableCors({
     origin: env.CORS_ORIGINS,
     credentials: true,

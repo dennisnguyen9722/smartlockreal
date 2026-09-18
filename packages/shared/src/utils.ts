@@ -58,3 +58,15 @@ export function toJsonSafe(value: unknown): JsonValue {
   }
   return result;
 }
+
+/** Kích thước ảnh: nhỏ (danh sách), vừa (trang sản phẩm), lớn (xem chi tiết) */
+export type ImageSize = 'sm' | 'md' | 'lg';
+
+/**
+ * Lấy đường dẫn ảnh theo kích thước.
+ * Ảnh lưu theo quy ước: <hash>.webp (lớn), <hash>_md.webp, <hash>_sm.webp
+ */
+export function imageUrl(url: string, size: ImageSize = 'md'): string {
+  if (size === 'lg') return url;
+  return url.replace(/\.webp$/, `_${size}.webp`);
+}
