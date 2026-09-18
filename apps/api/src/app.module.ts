@@ -9,13 +9,14 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { RedisModule } from './redis/redis.module';
 import { DevController } from './dev/dev.controller';
 import { QueueModule } from './queue/queue.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({})
 export class AppModule {
   static register(env: Env): DynamicModule {
     return {
       module: AppModule,
-      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, QueueModule, RealtimeModule],
+      imports: [ConfigModule.forRoot(env), DatabaseModule, RedisModule, QueueModule, RealtimeModule, AuthModule],
       controllers: [
         HealthController,
         // Endpoint phát triển chỉ tồn tại ngoài production
