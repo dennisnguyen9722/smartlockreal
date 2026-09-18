@@ -26,6 +26,8 @@ import { ProductService } from './product.service';
 import { Delete } from '@nestjs/common';
 import { VariantCreateSchema, VariantUpdateSchema } from '@ktm/shared';
 import { VariantService } from './variant.service';
+import { ProductMediaAttachSchema, ProductMediaReorderSchema } from '@ktm/shared';
+import { ProductMediaService } from './product-media.service';
 
 const IdSchema = z.uuid('ID không hợp lệ');
 
@@ -54,6 +56,7 @@ export class ProductController {
   constructor(
     private readonly products: ProductService,
     private readonly variants: VariantService,
+    private readonly media: ProductMediaService,
   ) {}
 
   @Get()
@@ -104,6 +107,48 @@ export class ProductController {
     @Req() req: Request,
   ) {
     return this.variants.remove(parse(IdSchema, variantId), user.id, auditContext(req));
+  }
+
+  @Get(':id/media')
+  @RequirePermissions(Permission.CATALOG_VIEW)
+  listMedia(@Param('id') id: string) {
+    return this.media.list(parse(IdSchema, id));
+  }
+
+  @Post(':id/media')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.CREATED)
+  attachMedia(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.media.attach(
+      parse(IdSchema, id),
+      parse(ProductMediaAttachSchema, body),
+      user.id,
+      auditContext(req),
+    );
+  }
+
+  @Patch(':id/media/order')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  reorderMedia(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    const { mediaIds } = parse(ProductMediaReorderSchema, body);
+    return this.media.reorder(parse(IdSchema, id), mediaIds, user.id, auditContext(req));
+  }
+
+  @Delete('media/:mediaId')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  detachMedia(@Param('mediaId') mediaId: string, @CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.media.detach(parse(IdSchema, mediaId), user.id, auditContext(req));
   }
 
   @Get(':id')

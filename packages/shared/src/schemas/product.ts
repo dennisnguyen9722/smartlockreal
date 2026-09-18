@@ -209,3 +209,18 @@ export const VariantUpdateSchema = z.object({
 
 export type VariantCreateInput = z.infer<typeof VariantCreateSchema>;
 export type VariantUpdateInput = z.infer<typeof VariantUpdateSchema>;
+
+export const ProductMediaAttachSchema = z.object({
+  /** ID của ảnh đã tải lên thư viện */
+  mediaAssetId: z.uuid('Chưa chọn ảnh'),
+  /** Gắn riêng cho một biến thể; bỏ trống = ảnh chung của sản phẩm */
+  variantId: z.uuid().nullable().optional(),
+  altText: z.string().trim().max(200).optional(),
+});
+
+/** Sắp xếp lại thứ tự ảnh; ảnh đầu tiên là ảnh đại diện */
+export const ProductMediaReorderSchema = z.object({
+  mediaIds: z.array(z.uuid()).min(1).max(50),
+});
+
+export type ProductMediaAttachInput = z.infer<typeof ProductMediaAttachSchema>;
