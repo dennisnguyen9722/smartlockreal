@@ -3,7 +3,8 @@ import { ConfigModule } from './config/config.module';
 import type { Env } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RealtimeModule } from './realtime/realtime.module';
 import { RedisModule } from './redis/redis.module';
@@ -15,6 +16,7 @@ import { PermissionsGuard } from './auth/permissions.guard';
 import { RateLimitGuard } from './common/rate-limit/rate-limit.guard';
 import { AuditModule } from './audit/audit.module';
 import { CatalogModule } from './catalog/catalog.module';
+
 
 @Module({})
 export class AppModule {
@@ -33,6 +35,7 @@ export class AppModule {
         { provide: APP_GUARD, useClass: RateLimitGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionsGuard },
+        { provide: APP_INTERCEPTOR, useClass: BigIntInterceptor },
       ],
     };
   }
