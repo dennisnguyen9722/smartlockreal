@@ -1,66 +1,97 @@
 import { Inject, Logger } from '@nestjs/common';
 import {
-  MessageBody,
   type OnGatewayConnection,
   type OnGatewayDisconnect,
-  SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Redis } from 'ioredis';
 import type { Namespace, Socket } from 'socket.io';
-import { REALTIME_NAMESPACE, RealtimeEvent } from '@ktm/shared';
-import { ENV } from '../config/config.module';
-import type { Env } from '../config/env';
+import { REALTIME_NAMESPACE, type RealtimeEvent, type StaffRoleCode } from '@ktm/shared';
+import { AuthService } from '../auth/auth.service';
+import { TokenService } from '../auth/token.service';
+import { REDIS } from '../redis/redis.module';
+
+interface SocketStaff {
+  id: string;
+  role: StaffRoleCode;
+  sessionId: string;
+}
+
+/** Dữ liệu gắn kèm mỗi kết nối sau khi xác thực */
+interface AuthedSocket extends Socket {
+  data: { staff?: SocketStaff };
+}
 
 /**
- * Quy ước room (dùng từ Bước 4, sau khi có xác thực):
- *   staff:<id> | role:<mã vai trò> | location:<mã điểm> | customer:<id>
+ * Quy ước phòng:
+ *   staff:<id>       - một nhân viên
+ *   role:<vai trò>   - mọi nhân viên cùng vai trò
  */
 @WebSocketGateway({ namespace: REALTIME_NAMESPACE })
-
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private readonly server!: Namespace;
 
   private readonly logger = new Logger(RealtimeGateway.name);
 
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  constructor(
+    private readonly tokens: TokenService,
+    @Inject(REDIS) private readonly redis: Redis,
+  ) {}
 
-  handleConnection(client: Socket) {
-    this.logger.log(`Kết nối: ${client.id}`);
-    // TẠM THỜI để kiểm tra chiều server -> client; sẽ xóa ở Bước 4
-    client.emit(RealtimeEvent.NOTIFICATION_NEW, { title: 'Kết nối realtime thành công' });
-  }
+  async handleConnection(client: AuthedSocket) {
+    const token: unknown = client.handshake.auth?.token;
+    if (typeof token !== 'string' || token.length === 0) {
+      this.reject(client, 'Thiếu token');
+      return;
+    }
 
-  handleDisconnect(client: Socket) {
-    this.logger.log(`Ngắt kết nối: ${client.id}`);
-  }
+    const result = await this.tokens.verifyAccessToken(token);
+    if (!result.ok) {
+      this.reject(client, result.reason === 'EXPIRED' ? 'Token hết hạn' : 'Token không hợp lệ');
+      return;
+    }
 
-  /** Giá trị trả về được gửi lại cho client dưới dạng "ack" */
-  @SubscribeMessage(RealtimeEvent.SYSTEM_PING)
-  async ping(@MessageBody() body: unknown) {
-    const sockets = await this.server.fetchSockets(); // hỏi tất cả instance qua Redis
-    return {
-      pong: true,
-      serverTime: new Date().toISOString(),
-      instancePort: this.env.API_PORT,
-      totalClients: sockets.length,
-      echo: body,
+    const revoked = await this.redis.exists(AuthService.revokedKey(result.payload.sid));
+    if (revoked === 1) {
+      this.reject(client, 'Phiên đã bị thu hồi');
+      return;
+    }
+
+    const staff: SocketStaff = {
+      id: result.payload.sub,
+      role: result.payload.role,
+      sessionId: result.payload.sid,
     };
+    client.data.staff = staff;
+    await client.join([`staff:${staff.id}`, `role:${staff.role}`]);
+
+    this.logger.log(`Kết nối: ${staff.id} (${staff.role})`);
   }
 
-  /** TẠM THỜI: kiểm thử phát thông báo giữa nhiều instance. Bị chặn ở production. */
-  @SubscribeMessage('system:broadcast-test')
-  broadcastTest() {
-    if (this.env.NODE_ENV === 'production') return;
-    this.server.emit(RealtimeEvent.NOTIFICATION_NEW, {
-      type: 'broadcast-test',
-      fromPort: this.env.API_PORT,
-    });
+  handleDisconnect(client: AuthedSocket) {
+    const staff = client.data.staff;
+    if (staff) this.logger.log(`Ngắt kết nối: ${staff.id}`);
   }
 
   /** Các module nghiệp vụ gọi hàm này để phát thông báo */
   emitToRoom(room: string, event: RealtimeEvent, payload: unknown) {
     this.server.to(room).emit(event, payload);
+  }
+
+  emitToStaff(staffId: string, event: RealtimeEvent, payload: unknown) {
+    this.emitToRoom(`staff:${staffId}`, event, payload);
+  }
+
+  emitToRole(role: StaffRoleCode, event: RealtimeEvent, payload: unknown) {
+    this.emitToRoom(`role:${role}`, event, payload);
+  }
+
+  private reject(client: Socket, reason: string) {
+    this.logger.debug(`Từ chối kết nối ${client.id}: ${reason}`);
+    // Báo lý do rồi mới ngắt, để client biết cần làm mới token hay đăng nhập lại
+    client.emit('auth:error', { reason });
+    client.disconnect(true);
   }
 }

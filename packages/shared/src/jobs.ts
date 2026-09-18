@@ -2,7 +2,7 @@
 export interface SystemHelloJobData {
   from: string;
   at: string;
-  /** Room Socket.IO sẽ nhận thông báo khi job xong */
+  /** Phòng Socket.IO nhận thông báo khi job xong, vd: staff:<id> */
   notifyRoom?: string;
 }
 
