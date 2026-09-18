@@ -52,7 +52,7 @@ export const PRODUCT_IMPORT_COLUMNS: ImportColumn[] = [
     header: 'Tùy chọn',
     key: 'optionValues',
     width: 26,
-    note: 'Dạng mã=giá_trị, cách nhau bởi |. Vd: mau=den|phien-ban=wifi',
+    note: 'Dạng mã=giá_trị:Tên hiển thị, cách nhau bởi |. Vd: mau=den:Đen|phien-ban=wifi:Có Wi-Fi',
   },
   { header: 'Giá bán (VND) *', key: 'price', width: 16, required: true, note: 'Số nguyên, chưa VAT' },
   { header: 'Giá gạch ngang', key: 'compareAtPrice', width: 16, note: 'Phải lớn hơn giá bán' },
@@ -71,3 +71,67 @@ export const PRODUCT_IMPORT_COLUMNS: ImportColumn[] = [
 export const SPEC_COLUMN_PREFIX = 'spec:';
 
 export const IMPORT_MAX_ROWS = 2000;
+
+/** Trạng thái của một dòng sau khi kiểm tra */
+export type ImportRowStatus = 'CREATE' | 'UPDATE' | 'ERROR';
+
+export interface ImportRowIssue {
+  column: string;
+  message: string;
+}
+
+export interface ImportPreviewRow {
+  /** Số dòng trong file Excel, để người dùng tìm đúng chỗ cần sửa */
+  rowNumber: number;
+  productCode: string;
+  productName: string;
+  sku: string;
+  variantName: string;
+  status: ImportRowStatus;
+  issues: ImportRowIssue[];
+}
+
+export interface ImportPreviewResult {
+  /** Mã phiên để xác nhận ghi; hết hạn sau 30 phút */
+  sessionId: string;
+  totalRows: number;
+  productsToCreate: number;
+  productsToUpdate: number;
+  variantsToCreate: number;
+  variantsToUpdate: number;
+  errorCount: number;
+  rows: ImportPreviewRow[];
+}
+
+/**
+ * Đọc chuỗi tùy chọn: "mau=den:Đen|phien-ban=wifi"
+ * Trả về { values: { mau: 'den' }, labels: { 'mau:den': 'Đen' } }
+ */
+export function parseOptionValues(raw: string): {
+  values: Record<string, string>;
+  labels: Record<string, string>;
+  errors: string[];
+} {
+  const values: Record<string, string> = {};
+  const labels: Record<string, string> = {};
+  const errors: string[] = [];
+
+  for (const part of raw.split('|').map((item) => item.trim()).filter(Boolean)) {
+    const [left, right] = part.split('=');
+    if (!left || !right) {
+      errors.push(`"${part}" không đúng dạng mã=giá_trị`);
+      continue;
+    }
+    const optionCode = left.trim();
+    const [rawValue, label] = right.split(':');
+    const valueCode = (rawValue ?? '').trim();
+
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(optionCode) || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(valueCode)) {
+      errors.push(`"${part}": mã chỉ gồm chữ thường, số và gạch ngang`);
+      continue;
+    }
+    values[optionCode] = valueCode;
+    if (label?.trim()) labels[`${optionCode}:${valueCode}`] = label.trim();
+  }
+  return { values, labels, errors };
+}

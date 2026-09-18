@@ -5,30 +5,28 @@ import { ProductMediaService } from './product-media.service';
 import { ProductService } from './product.service';
 import { SpecDefinitionService } from './spec-definition.service';
 import { VariantService } from './variant.service';
+import { ImportParserService } from './import/parser.service';
+import { ImportService } from './import/import.service';
+import { ImportTemplateService } from './import/template.service';
 import { BrandController, CategoryController } from './catalog.controller';
 import { ProductController } from './product.controller';
 import { ImportController } from './import/import.controller';
-import { ImportTemplateService } from './import/template.service';
+
+const services = [
+  BrandService,
+  CategoryService,
+  SpecDefinitionService,
+  ProductService,
+  VariantService,
+  ProductMediaService,
+  ImportTemplateService,
+  ImportParserService,
+  ImportService,
+];
 
 @Module({
   controllers: [BrandController, CategoryController, ProductController, ImportController],
-  providers: [
-    BrandService,
-    CategoryService,
-    SpecDefinitionService,
-    ProductService,
-    VariantService,
-    ProductMediaService,
-    ImportTemplateService
-  ],
-  exports: [
-    BrandService,
-    CategoryService,
-    SpecDefinitionService,
-    ProductService,
-    VariantService,
-    ProductMediaService,
-    ImportTemplateService
-  ],
+  providers: services,
+  exports: services,
 })
 export class CatalogModule {}

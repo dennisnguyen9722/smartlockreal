@@ -1,16 +1,35 @@
-import { Controller, Get, HttpStatus, Query, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { ErrorCode, Permission } from '@ktm/shared';
-import { RequirePermissions } from '../../auth/auth.decorators';
+import { CurrentUser, RequirePermissions } from '../../auth/auth.decorators';
 import { AppException } from '../../common/errors/app.exception';
+import type { AuthUser } from '../../common/types/express';
+import { ImportService } from './import.service';
+import { ImportParserService } from './parser.service';
 import { ImportTemplateService } from './template.service';
 
 const CategoryIdSchema = z.uuid().optional();
+const MAX_FILE_MB = 5;
 
 @Controller('catalog/import')
 export class ImportController {
-  constructor(private readonly template: ImportTemplateService) {}
+  constructor(
+    private readonly template: ImportTemplateService,
+    private readonly parser: ImportParserService,
+    private readonly importer: ImportService,
+  ) {}
 
   @Get('template')
   @RequirePermissions(Permission.CATALOG_MANAGE)
@@ -31,5 +50,24 @@ export class ImportController {
       'Content-Length': String(buffer.length),
     });
     res.end(buffer);
+  }
+
+  /** Đọc file và trả về kết quả xem trước; CHƯA ghi gì vào database */
+  @Post('preview')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_MB * 1024 * 1024, files: 1 } }))
+  async preview(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, HttpStatus.BAD_REQUEST, {
+        field: 'file',
+        message: 'Chưa chọn file',
+      });
+    }
+    const rows = await this.parser.parse(file.buffer);
+    return this.importer.preview(rows, user.id);
   }
 }
