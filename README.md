@@ -100,3 +100,62 @@ pnpm add x --filter @ktm/ui
 - Sau mỗi `db:migrate`, nếu Prisma **hỏi tên migration mới**: nhấn `Ctrl + C`,
   chạy `db:migrate --name drift_check --create-only` để xem Prisma muốn đổi gì, rồi xóa file đó.
 - Migration đã chạy thì không sửa; muốn sửa thì tạo migration mới.
+
+## Tài khoản nhân viên
+
+Chỉ nhân viên mới đăng nhập; khách hàng đặt hàng bằng số điện thoại, không có tài khoản.
+
+```bash
+pnpm --filter @ktm/api staff list
+pnpm --filter @ktm/api staff create <email> "<Họ tên>" [SUPER_ADMIN|SALE_STAFF]
+pnpm --filter @ktm/api staff reset-password <email>
+```
+
+Mật khẩu được nhập ẩn, không lưu vào lịch sử Terminal.
+
+**Quy tắc mật khẩu** (`packages/shared/src/password-policy.ts`): tối thiểu 12 ký tự, có chữ hoa,
+chữ thường và chữ số; không chứa các từ dễ đoán (`password`, `matkhau`, `123456`, `qwerty`,
+`admin`, `khoathongminh`).
+
+**Hai vai trò** (quyền định nghĩa trong `packages/shared/src/permissions.ts`):
+
+| Vai trò | Quyền |
+|---|---|
+| `SUPER_ADMIN` | Toàn bộ 31 quyền |
+| `SALE_STAFF` | 21 quyền: sản phẩm, nội dung, đơn hàng, khách hàng, báo giá, lắp đặt, bảo hành, nhập/chuyển kho |
+
+10 quyền chỉ quản trị có: sửa giá, duyệt báo giá, điều chỉnh tồn kho, hủy đơn đã xác nhận,
+hoàn tiền, xuất dữ liệu khách, báo cáo doanh thu, quản lý nhân viên, cấu hình, xem nhật ký.
+
+## Cơ chế đăng nhập
+
+| Thành phần | Chi tiết |
+|---|---|
+| Mật khẩu | Argon2id (19 MiB, 2 vòng, 1 luồng) theo khuyến nghị OWASP |
+| Access token | JWT 15 phút, trả trong nội dung phản hồi; admin giữ **trong bộ nhớ**, không dùng `localStorage` |
+| Refresh token | Chuỗi ngẫu nhiên 7 ngày, cookie `HttpOnly` path `/api/v1/auth`; database chỉ lưu mã băm SHA-256 |
+| Xoay vòng | Mỗi lần làm mới, token cũ bị thu hồi. Dùng lại token cũ = thu hồi **cả chuỗi phiên** |
+| Thu hồi tức thì | Đăng xuất / đổi mật khẩu ghi mã phiên vào Redis 15 phút, access token cũ mất hiệu lực ngay |
+| Chống dò mật khẩu | Mỗi IP 10 lần/15 phút, mỗi email 5 lần/15 phút (Redis); khóa tài khoản 15 phút sau 5 lần sai |
+| Realtime | Socket.IO nhận token qua `auth.token`, tự vào phòng `staff:<id>` và `role:<vai trò>` |
+
+**Endpoint mặc định đều yêu cầu đăng nhập.** Muốn công khai phải đánh dấu `@Public()`.
+Yêu cầu quyền bằng `@RequirePermissions(Permission.X)`.
+
+## Quy ước viết API
+
+- Kiểm tra dữ liệu vào bằng Zod ngay trong controller, lỗi trả `VALIDATION_FAILED` kèm `details`.
+- Ghi nhật ký thao tác quan trọng bằng `AuditService.log()`; lỗi ghi nhật ký không làm hỏng nghiệp vụ.
+- Cột JSON: dùng `toJsonSafe()` từ `@ktm/shared` (xử lý `BigInt` của tiền và `Date`).
+- Không trả `passwordHash`, token hay stack trace ra client.
+
+## Sự cố thường gặp (bổ sung)
+
+| Hiện tượng | Cách xử lý |
+|---|---|
+| `EADDRINUSE: address already in use :::3001` | Tiến trình cũ còn chạy: `lsof -tiTCP:3001 -sTCP:LISTEN \| xargs -r kill` (đổi cổng cho 3000, 4000) |
+| `pnpm dev` dừng cả cụm vì một app lỗi | Turbo dừng mọi tác vụ khi một tác vụ thất bại; sửa app lỗi rồi chạy lại |
+| Đăng nhập trả `RATE_LIMITED` khi đang thử nghiệm | Xóa bộ đếm: `docker exec ktm-redis redis-cli --scan --pattern 'rl:*' \| xargs -r docker exec ktm-redis redis-cli del` |
+| Tài khoản bị khóa do thử sai nhiều | `pnpm --filter @ktm/api staff reset-password <email>` |
+| `Type 'Record<string, unknown>' is not assignable to ... InputJsonValue` | Dùng `toJsonSafe()` trước khi ghi vào cột JSON |
+| Dừng dịch vụ | Luôn nhấn `Ctrl + C` trong tab đang chạy, không đóng thẳng cửa sổ Terminal |
