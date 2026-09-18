@@ -6,7 +6,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node --env-file=../../.env dist/main.js",
-    "dev": "tsc -p tsconfig.json && concurrently -k -n tsc,api -c blue,green \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node --env-file=../../.env --watch dist/main.js\""
+    "dev": "tsc -p tsconfig.json && concurrently -k -n tsc,api -c blue,green \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node --env-file=../../.env --watch dist/main.js\"",
+    "staff": "node --env-file=../../.env scripts/staff-cli.cjs"
   },
   "dependencies": {
     "@ktm/database": "workspace:*",
