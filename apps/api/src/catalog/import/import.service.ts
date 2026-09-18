@@ -9,6 +9,8 @@ import {
   parseOptionValues,
   slugifyVi,
   validateSpecs,
+  toJsonSafe,
+  type JsonObject,
   type ImportPreviewResult,
   type ImportPreviewRow,
   type ImportRowIssue,
@@ -363,6 +365,135 @@ export class ImportService {
       errorCount,
       rows: previewRows,
     };
+  }
+
+    async apply(sessionId: string, staffId: string) {
+    const raw = await this.redis.get(ImportService.sessionKey(sessionId));
+    if (!raw) {
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, {
+        message: 'Phiên nhập đã hết hạn hoặc không tồn tại. Hãy tải file lên lại.',
+      });
+    }
+
+    const plan = JSON.parse(raw) as ImportPlan;
+    if (plan.staffId !== staffId) {
+      throw new AppException(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN, {
+        message: 'Phiên nhập này thuộc về người khác',
+      });
+    }
+
+    let productsCreated = 0;
+    let productsUpdated = 0;
+    let variantsCreated = 0;
+    let variantsUpdated = 0;
+
+    // Một transaction cho toàn bộ: có lỗi thì không ghi dòng nào
+    await this.db.$transaction(
+      async (tx) => {
+        for (const product of plan.products) {
+          let productId = product.existingProductId;
+
+          if (productId) {
+            await tx.product.update({
+              where: { id: productId },
+              data: {
+                name: product.name,
+                brandId: product.brandId,
+                categoryId: product.categoryId,
+                manufacturerCode: product.manufacturerCode,
+                shortDescription: product.shortDescription,
+                warrantyMonths: product.warrantyMonths,
+                specs: toJsonSafe(product.specs) as JsonObject,
+              },
+            });
+            productsUpdated += 1;
+          } else {
+            const created = await tx.product.create({
+              data: {
+                type: product.type as 'LOCK' | 'ACCESSORY' | 'SERVICE' | 'BUNDLE',
+                slug: product.slug,
+                name: product.name,
+                brandId: product.brandId,
+                categoryId: product.categoryId,
+                manufacturerCode: product.manufacturerCode,
+                shortDescription: product.shortDescription,
+                warrantyMonths: product.warrantyMonths,
+                specs: toJsonSafe(product.specs) as JsonObject,
+              },
+            });
+            productId = created.id;
+            productsCreated += 1;
+
+            for (const [index, option] of product.options.entries()) {
+              const createdOption = await tx.productOption.create({
+                data: { productId, code: option.code, name: option.name, sortOrder: index },
+              });
+              for (const [valueIndex, value] of option.values.entries()) {
+                await tx.productOptionValue.create({
+                  data: {
+                    optionId: createdOption.id,
+                    code: value.code,
+                    value: value.value,
+                    sortOrder: valueIndex,
+                  },
+                });
+              }
+            }
+          }
+
+          // Lấy id của giá trị tùy chọn để gắn cho biến thể
+          const optionValues = await tx.productOptionValue.findMany({
+            where: { option: { productId } },
+            include: { option: { select: { code: true } } },
+          });
+          const valueIdByKey = new Map(
+            optionValues.map((value) => [`${value.option.code}:${value.code}`, value.id]),
+          );
+
+          for (const [index, variant] of product.variants.entries()) {
+            const data = {
+              name: variant.name,
+              price: BigInt(variant.price),
+              compareAtPrice: variant.compareAtPrice != null ? BigInt(variant.compareAtPrice) : null,
+              vatRateBps: variant.vatRateBps,
+              trackSerial: variant.trackSerial,
+              weightGrams: variant.weightGrams,
+            };
+
+            if (variant.existingVariantId) {
+              await tx.productVariant.update({ where: { id: variant.existingVariantId }, data });
+              variantsUpdated += 1;
+            } else {
+              const createdVariant = await tx.productVariant.create({
+                data: {
+                  ...data,
+                  productId,
+                  sku: variant.sku,
+                  optionKey: variant.optionKey,
+                  sortOrder: index,
+                },
+              });
+              for (const [optionCode, valueCode] of Object.entries(variant.optionValues)) {
+                const optionValueId = valueIdByKey.get(`${optionCode}:${valueCode}`);
+                if (optionValueId) {
+                  await tx.variantOptionValue.create({
+                    data: { variantId: createdVariant.id, optionValueId },
+                  });
+                }
+              }
+              variantsCreated += 1;
+            }
+          }
+        }
+      },
+      // File lớn cần nhiều thời gian hơn mặc định
+      { timeout: 120_000, maxWait: 10_000 },
+    );
+
+    // Dùng xong xóa ngay, tránh ghi hai lần khi bấm nút nhiều lần
+    await this.redis.del(ImportService.sessionKey(sessionId));
+
+    return { productsCreated, productsUpdated, variantsCreated, variantsUpdated };
   }
 
   static sessionKey(sessionId: string): string {
