@@ -5,3 +5,4 @@ export * from './jobs';
 export * from './permissions';
 export * from './password-policy';
 export * from './schemas/catalog';
+export * from './schemas/spec';

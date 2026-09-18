@@ -27,6 +27,8 @@ import { AppException } from '../common/errors/app.exception';
 import type { AuthUser } from '../common/types/express';
 import { BrandService } from './brand.service';
 import { CategoryService } from './category.service';
+import { SpecDefinitionCreateSchema, SpecDefinitionUpdateSchema } from '@ktm/shared';
+import { SpecDefinitionService } from './spec-definition.service';
 
 const IdSchema = z.uuid('ID không hợp lệ');
 
@@ -100,7 +102,63 @@ export class BrandController {
 
 @Controller('catalog/categories')
 export class CategoryController {
-  constructor(private readonly categories: CategoryService) {}
+  constructor(
+    private readonly categories: CategoryService,
+    private readonly specs: SpecDefinitionService,
+  ) {}
+
+  @Get(':id/specs')
+  @RequirePermissions(Permission.CATALOG_VIEW)
+  listSpecs(@Param('id') id: string) {
+    return this.specs.listByCategory(parse(IdSchema, id));
+  }
+
+  /** Khuôn thông số đầy đủ, gồm cả kế thừa từ danh mục cha */
+  @Get(':id/specs/shapes')
+  @RequirePermissions(Permission.CATALOG_VIEW)
+  specShapes(@Param('id') id: string) {
+    return this.specs.getShapes(parse(IdSchema, id));
+  }
+
+  @Post(':id/specs')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.CREATED)
+  createSpec(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.specs.create(
+      parse(IdSchema, id),
+      parse(SpecDefinitionCreateSchema, body),
+      user.id,
+      auditContext(req),
+    );
+  }
+
+  @Patch('specs/:specId')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  updateSpec(
+    @Param('specId') specId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.specs.update(
+      parse(IdSchema, specId),
+      parse(SpecDefinitionUpdateSchema, body),
+      user.id,
+      auditContext(req),
+    );
+  }
+
+  @Delete('specs/:specId')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeSpec(@Param('specId') specId: string, @CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.specs.remove(parse(IdSchema, specId), user.id, auditContext(req));
+  }
 
   @Get()
   @RequirePermissions(Permission.CATALOG_VIEW)
