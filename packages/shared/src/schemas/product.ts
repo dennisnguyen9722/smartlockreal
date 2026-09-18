@@ -190,3 +190,22 @@ export function buildSku(productSlug: string, optionValues: Record<string, strin
   const base = [productSlug, suffix].filter(Boolean).join('-');
   return base.toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').slice(0, 64);
 }
+
+/** Thêm biến thể mới vào sản phẩm đã có */
+export const VariantCreateSchema = VariantInputSchema;
+
+export const VariantUpdateSchema = z.object({
+  sku: SkuSchema.optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  price: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  compareAtPrice: z.number().int().min(0).nullable().optional(),
+  barcode: z.string().trim().max(64).nullable().optional(),
+  weightGrams: z.number().int().positive().nullable().optional(),
+  trackSerial: z.boolean().optional(),
+  vatRateBps: z.number().int().min(0).max(10000).optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(9999).optional(),
+});
+
+export type VariantCreateInput = z.infer<typeof VariantCreateSchema>;
+export type VariantUpdateInput = z.infer<typeof VariantUpdateSchema>;

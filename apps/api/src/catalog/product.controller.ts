@@ -23,6 +23,9 @@ import { CurrentUser, RequirePermissions } from '../auth/auth.decorators';
 import { AppException } from '../common/errors/app.exception';
 import type { AuthUser } from '../common/types/express';
 import { ProductService } from './product.service';
+import { Delete } from '@nestjs/common';
+import { VariantCreateSchema, VariantUpdateSchema } from '@ktm/shared';
+import { VariantService } from './variant.service';
 
 const IdSchema = z.uuid('ID không hợp lệ');
 
@@ -48,12 +51,59 @@ function auditContext(req: Request) {
 
 @Controller('catalog/products')
 export class ProductController {
-  constructor(private readonly products: ProductService) {}
+  constructor(
+    private readonly products: ProductService,
+    private readonly variants: VariantService,
+  ) {}
 
   @Get()
   @RequirePermissions(Permission.CATALOG_VIEW)
   list(@Query() query: unknown) {
     return this.products.list(parse(ProductListQuerySchema, query));
+  }
+
+  @Post(':id/variants')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.CREATED)
+  createVariant(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.variants.create(
+      parse(IdSchema, id),
+      parse(VariantCreateSchema, body),
+      user.id,
+      auditContext(req),
+    );
+  }
+
+  @Patch('variants/:variantId')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  updateVariant(
+    @Param('variantId') variantId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.variants.update(
+      parse(IdSchema, variantId),
+      parse(VariantUpdateSchema, body),
+      user.id,
+      auditContext(req),
+    );
+  }
+
+  @Delete('variants/:variantId')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeVariant(
+    @Param('variantId') variantId: string,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.variants.remove(parse(IdSchema, variantId), user.id, auditContext(req));
   }
 
   @Get(':id')
