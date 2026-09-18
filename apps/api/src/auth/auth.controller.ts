@@ -9,6 +9,7 @@ import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH, REFRESH_TOKEN_TTL_SECONDS } f
 import { AuthService, type AuthResult } from './auth.service';
 import { CurrentUser, Public } from './auth.decorators';
 import type { AuthUser } from '../common/types/express';
+import { RateLimit } from '../common/rate-limit/rate-limit.decorator';
 
 const LoginSchema = z.object({
   email: z.string().min(3).max(200),
@@ -29,6 +30,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit({ name: 'login', limit: 10, windowSeconds: 900, emailLimit: 5 })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -46,6 +48,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit({ name: 'refresh', limit: 60, windowSeconds: 900 })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

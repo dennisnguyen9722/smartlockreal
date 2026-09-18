@@ -12,6 +12,7 @@ import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { AuthGuard } from './auth/auth.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
+import { RateLimitGuard } from './common/rate-limit/rate-limit.guard';
 
 @Module({})
 export class AppModule {
@@ -26,7 +27,8 @@ export class AppModule {
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },
-        // Thứ tự quan trọng: xác thực token trước, kiểm tra quyền sau
+        // Chặn spam trước khi làm việc nặng (băm mật khẩu, truy vấn database)
+        { provide: APP_GUARD, useClass: RateLimitGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_GUARD, useClass: PermissionsGuard },
       ],
