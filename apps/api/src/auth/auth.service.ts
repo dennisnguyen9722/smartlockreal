@@ -1,7 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, Staff } from '@ktm/database';
-import { ErrorCode, type StaffRoleCode } from '@ktm/shared';
 import { AppException } from '../common/errors/app.exception';
 import { PRISMA } from '../database/database.module';
 import {
@@ -14,10 +13,13 @@ import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { Redis } from 'ioredis';
 import { REDIS } from '../redis/redis.module';
+import { checkPasswordStrength, ErrorCode, type StaffRoleCode } from '@ktm/shared';
+import { AuditService } from '../audit/audit.service';
 
 export interface RequestContext {
   ip?: string;
   userAgent?: string;
+  traceId?: string;
 }
 
 export interface AuthResult {
@@ -36,6 +38,7 @@ export class AuthService {
     @Inject(REDIS) private readonly redis: Redis,
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
+    private readonly audit: AuditService,
   ) {}
 
   async login(email: string, password: string, ctx: RequestContext): Promise<AuthResult> {
@@ -57,11 +60,19 @@ export class AuthService {
 
     const valid = await this.passwords.verify(staff.passwordHash, password);
     if (!valid) {
-      await this.recordFailedLogin(staff);
+      await this.recordFailedLogin(staff, ctx);
       throw new AppException(ErrorCode.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
     }
 
-    return this.createSession(staff, randomUUID(), ctx);
+    const result = await this.createSession(staff, randomUUID(), ctx);
+    await this.audit.log({
+      staffId: staff.id,
+      action: 'staff.login',
+      entityType: 'STAFF',
+      entityId: staff.id,
+      ctx,
+    });
+    return result;
   }
 
   async refresh(rawToken: string, ctx: RequestContext): Promise<AuthResult> {
@@ -78,6 +89,14 @@ export class AuthService {
     // Token đã bị thu hồi mà vẫn được dùng: nhiều khả năng đã bị đánh cắp
     if (session.revokedAt) {
       await this.revokeFamily(session.familyId, 'REUSE_DETECTED');
+      await this.audit.log({
+        staffId: session.staffId,
+        action: 'staff.session_reuse_detected',
+        entityType: 'STAFF_SESSION',
+        entityId: session.id,
+        changes: { familyId: session.familyId },
+        ctx,
+      });
       this.logger.warn(`Phát hiện dùng lại refresh token, thu hồi cả chuỗi phiên ${session.familyId}`);
       throw new AppException(ErrorCode.SESSION_REVOKED, HttpStatus.UNAUTHORIZED);
     }
@@ -92,14 +111,21 @@ export class AuthService {
     return this.createSession(session.staff, session.familyId, ctx, session.id);
   }
 
-  async logout(rawToken: string): Promise<void> {
+  async logout(rawToken: string, ctx: RequestContext): Promise<void> {
     const session = await this.db.staffSession.findUnique({
       where: { tokenHash: this.tokens.hashRefreshToken(rawToken) },
-      select: { familyId: true },
+      select: { familyId: true, staffId: true },
     });
-    if (session) {
-      await this.revokeFamily(session.familyId, 'LOGOUT');
-    }
+    if (!session) return;
+
+    await this.revokeFamily(session.familyId, 'LOGOUT');
+    await this.audit.log({
+      staffId: session.staffId,
+      action: 'staff.logout',
+      entityType: 'STAFF',
+      entityId: session.staffId,
+      ctx,
+    });
   }
 
   async getProfile(staffId: string) {
@@ -168,7 +194,7 @@ export class AuthService {
     };
   }
 
-  private async recordFailedLogin(staff: Staff): Promise<void> {
+  private async recordFailedLogin(staff: Staff, ctx: RequestContext): Promise<void> {
     const attempts = staff.failedLoginCount + 1;
     const shouldLock = attempts >= MAX_FAILED_LOGINS;
     await this.db.staff.update({
@@ -177,6 +203,83 @@ export class AuthService {
         failedLoginCount: shouldLock ? 0 : attempts,
         lockedUntil: shouldLock ? new Date(Date.now() + LOCK_DURATION_MINUTES * 60 * 1000) : staff.lockedUntil,
       },
+    });
+    await this.audit.log({
+      staffId: staff.id,
+      action: shouldLock ? 'staff.locked' : 'staff.login_failed',
+      entityType: 'STAFF',
+      entityId: staff.id,
+      changes: { attempts },
+      ctx,
+    });
+  }
+
+  async changePassword(
+    staffId: string,
+    currentPassword: string,
+    newPassword: string,
+    ctx: RequestContext,
+  ): Promise<void> {
+    const staff = await this.db.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+
+    if (!(await this.passwords.verify(staff.passwordHash, currentPassword))) {
+      await this.audit.log({
+        staffId,
+        action: 'staff.password_change_failed',
+        entityType: 'STAFF',
+        entityId: staffId,
+        ctx,
+      });
+      throw new AppException(ErrorCode.INVALID_CREDENTIALS, HttpStatus.UNAUTHORIZED);
+    }
+
+    const strength = checkPasswordStrength(newPassword);
+    if (!strength.valid) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, HttpStatus.BAD_REQUEST, {
+        field: 'newPassword',
+        errors: strength.errors,
+      });
+    }
+    if (await this.passwords.verify(staff.passwordHash, newPassword)) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, HttpStatus.BAD_REQUEST, {
+        field: 'newPassword',
+        errors: ['Mật khẩu mới phải khác mật khẩu hiện tại'],
+      });
+    }
+
+    const passwordHash = await this.passwords.hash(newPassword);
+    const sessions = await this.db.staffSession.findMany({
+      where: { staffId, revokedAt: null },
+      select: { id: true },
+    });
+    const now = new Date();
+
+    await this.db.$transaction([
+      this.db.staff.update({
+        where: { id: staffId },
+        data: { passwordHash, passwordChangedAt: now, failedLoginCount: 0, lockedUntil: null },
+      }),
+      this.db.staffSession.updateMany({
+        where: { staffId, revokedAt: null },
+        data: { revokedAt: now, revokeReason: 'PASSWORD_CHANGED' },
+      }),
+    ]);
+
+    // Vô hiệu hóa mọi access token còn hạn, kể cả phiên đang gọi API này
+    const pipeline = this.redis.pipeline();
+    for (const session of sessions) {
+      pipeline.set(AuthService.revokedKey(session.id), 'PASSWORD_CHANGED', 'EX', ACCESS_TOKEN_TTL_SECONDS);
+    }
+    await pipeline.exec();
+
+    await this.audit.log({
+      staffId,
+      action: 'staff.password_changed',
+      entityType: 'STAFF',
+      entityId: staffId,
+      changes: { revokedSessions: sessions.length },
+      ctx,
     });
   }
 

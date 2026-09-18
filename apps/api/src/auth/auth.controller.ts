@@ -7,7 +7,7 @@ import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
 import { REFRESH_COOKIE_NAME, REFRESH_COOKIE_PATH, REFRESH_TOKEN_TTL_SECONDS } from './auth.constants';
 import { AuthService, type AuthResult } from './auth.service';
-import { CurrentUser, Public } from './auth.decorators';
+import { CurrentUser, Public, RequirePermissions } from './auth.decorators';
 import type { AuthUser } from '../common/types/express';
 import { RateLimit } from '../common/rate-limit/rate-limit.decorator';
 
@@ -16,12 +16,17 @@ const LoginSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(1).max(200),
+});
+
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
     @Inject(ENV) private readonly env: Env,
-  ) {}
+  ) { }
 
   @Get('me')
   async me(@CurrentUser() user: AuthUser) {
@@ -63,8 +68,36 @@ export class AuthController {
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.[REFRESH_COOKIE_NAME];
     if (typeof token === 'string' && token.length > 0) {
-      await this.auth.logout(token);
+      await this.auth.logout(token, this.context(req));
     }
+    res.clearCookie(REFRESH_COOKIE_NAME, this.cookieOptions());
+  }
+
+  @Post('change-password')
+  @RateLimit({ name: 'change-password', limit: 10, windowSeconds: 900 })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = ChangePasswordSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        HttpStatus.BAD_REQUEST,
+        parsed.error.issues.map((i: any) => ({ field: i.path.join('.'), message: i.message })),
+      );
+    }
+
+    await this.auth.changePassword(
+      user.id,
+      parsed.data.currentPassword,
+      parsed.data.newPassword,
+      this.context(req),
+    );
+    // Phiên đã bị thu hồi, xóa luôn cookie để admin quay về màn đăng nhập
     res.clearCookie(REFRESH_COOKIE_NAME, this.cookieOptions());
   }
 
@@ -77,7 +110,11 @@ export class AuthController {
   }
 
   private context(req: Request) {
-    return { ip: req.ip, userAgent: req.get('user-agent') ?? undefined };
+    return {
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+      traceId: req.get('x-request-id') ?? undefined,
+    };
   }
 
   /** Đặt refresh token vào cookie; KHÔNG trả nó trong nội dung phản hồi */

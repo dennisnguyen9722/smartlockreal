@@ -22,3 +22,39 @@ const vndNumber = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 export function formatVnd(amount: number | bigint): string {
   return `${vndNumber.format(amount)}\u00A0₫`;
 }
+/** Giá trị chuyển được sang JSON. Dùng cho các cột JSON trong database. */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
+
+/**
+ * Chuyển object bất kỳ thành dữ liệu JSON an toàn:
+ * BigInt -> chuỗi, Date -> ISO, undefined và hàm bị loại bỏ.
+ * Cần thiết vì dự án dùng BigInt cho tiền, mà JSON không hỗ trợ BigInt.
+ */
+export function toJsonSafe(value: unknown): JsonValue {
+  if (value === null) return null;
+
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return value;
+    case 'number':
+      return Number.isFinite(value) ? value : null;
+    case 'bigint':
+      return value.toString();
+    case 'undefined':
+    case 'function':
+    case 'symbol':
+      return null;
+  }
+
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(toJsonSafe);
+
+  const result: JsonObject = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (item === undefined || typeof item === 'function') continue;
+    result[key] = toJsonSafe(item);
+  }
+  return result;
+}
