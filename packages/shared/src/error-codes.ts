@@ -9,6 +9,8 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
   RATE_LIMITED: 'RATE_LIMITED',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  ALREADY_EXISTS: 'ALREADY_EXISTS',
+  IN_USE: 'IN_USE',
 
   // Xác thực và phân quyền
   UNAUTHENTICATED: 'UNAUTHENTICATED',
@@ -38,6 +40,8 @@ export interface ApiErrorBody {
 
 /** Thông báo tiếng Việt mặc định cho từng mã lỗi */
 export const ErrorMessageVi: Record<ErrorCode, string> = {
+  ALREADY_EXISTS: 'Dữ liệu đã tồn tại.',
+  IN_USE: 'Dữ liệu đang được sử dụng nên không thể xóa.',
   INTERNAL_ERROR: 'Hệ thống đang gặp sự cố, vui lòng thử lại sau.',
   VALIDATION_FAILED: 'Dữ liệu chưa hợp lệ, vui lòng kiểm tra lại.',
   NOT_FOUND: 'Không tìm thấy dữ liệu yêu cầu.',
