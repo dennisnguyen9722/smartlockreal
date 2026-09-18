@@ -1,11 +1,18 @@
-import { RealtimePanel } from '@/components/realtime-panel';
+'use client';
 
-// Trang tạm để kiểm tra khung. Giao diện thật sẽ làm ở Bước 12.
+import { Dashboard } from '@/components/dashboard';
+import { useAuth } from '@/components/auth-provider';
+import { LoginForm } from '@/components/login-form';
+
 export default function AdminHomePage() {
-  return (
-    <main className="mx-auto max-w-2xl space-y-6 p-8">
-      <h1 className="text-3xl font-bold tracking-tight">Trang quản trị</h1>
-      <RealtimePanel />
-    </main>
-  );
+  const { status } = useAuth();
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <p className="text-muted-foreground">Đang tải...</p>
+      </div>
+    );
+  }
+  return status === 'authenticated' ? <Dashboard /> : <LoginForm />;
 }
