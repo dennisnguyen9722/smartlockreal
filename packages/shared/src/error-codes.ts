@@ -14,6 +14,10 @@ export const ErrorCode = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   FORBIDDEN: 'FORBIDDEN',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
+  SESSION_REVOKED: 'SESSION_REVOKED',
 
   // Kho và đơn hàng
   OUT_OF_STOCK: 'OUT_OF_STOCK',
@@ -45,4 +49,8 @@ export const ErrorMessageVi: Record<ErrorCode, string> = {
   PRICE_CHANGED: 'Giá sản phẩm vừa thay đổi, vui lòng kiểm tra lại giỏ hàng.',
   QUOTE_EXPIRED: 'Báo giá đã hết hiệu lực.',
   SERVICE_UNAVAILABLE: 'Hệ thống đang bảo trì hoặc quá tải, vui lòng thử lại sau.',
+  INVALID_CREDENTIALS: 'Email hoặc mật khẩu không đúng.',
+  ACCOUNT_LOCKED: 'Tài khoản đang tạm khóa do nhập sai nhiều lần, vui lòng thử lại sau.',
+  ACCOUNT_DISABLED: 'Tài khoản đã bị vô hiệu hóa.',
+  SESSION_REVOKED: 'Phiên đăng nhập không còn hiệu lực, vui lòng đăng nhập lại.',
 };
