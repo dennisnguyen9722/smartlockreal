@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Filter, Package, Plus, Search, X } from 'lucide-react';
-import type { Paginated } from '@ktm/shared';
+import { FileSpreadsheet, Filter, ImageIcon, Plus, Search, X } from 'lucide-react';
+import { imageUrl, type Paginated } from '@ktm/shared';
 import { Badge } from '@ktm/ui/components/badge';
 import { Button } from '@ktm/ui/components/button';
 import { Input } from '@ktm/ui/components/input';
@@ -18,6 +18,7 @@ import {
 import { cn } from '@ktm/ui/lib/utils';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/data-states';
 import { PageHeader } from '@/components/page-header';
+import { ProductBulkActions } from '@/components/product-bulk-actions';
 import { Pagination } from '@/components/pagination';
 import { useAuth } from '@/components/auth-provider';
 import { useApiQuery } from '@/lib/hooks';
@@ -42,6 +43,8 @@ interface ProductListItem {
   brand: { id: string; name: string } | null;
   category: { id: string; name: string };
   variants: ProductVariantSummary[];
+  /** Tối đa một phần tử: ảnh đại diện */
+  media: { url: string }[];
 }
 
 interface BrandOption {
@@ -68,6 +71,19 @@ export default function ProductListPage() {
   const [status, setStatus] = useState('');
   const [brandId, setBrandId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+
+  // Sản phẩm đang được tick chọn (giữ khi chuyển trang, bỏ khi đổi bộ lọc)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  useEffect(() => setSelected(new Set()), [search, type, status, brandId, categoryId]);
+
+  function toggle(id: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
 
   // Đổi bộ lọc thì quay về trang 1
   function updateFilter(setter: (value: string) => void, value: string) {
@@ -123,12 +139,20 @@ export default function ProductListPage() {
         description="Khóa, phụ kiện, dịch vụ lắp đặt và combo"
         actions={
           canManage && (
-            <Link href="/san-pham/moi">
-              <Button>
-                <Plus className="size-4" />
-                Thêm sản phẩm
-              </Button>
-            </Link>
+            <>
+              <Link href="/san-pham/nhap-excel">
+                <Button variant="outline">
+                  <FileSpreadsheet className="size-4" />
+                  Nhập Excel
+                </Button>
+              </Link>
+              <Link href="/san-pham/moi">
+                <Button>
+                  <Plus className="size-4" />
+                  Thêm sản phẩm
+                </Button>
+              </Link>
+            </>
           )
         }
       />
@@ -211,64 +235,116 @@ export default function ProductListPage() {
           }
         />
       ) : (
-        <div className={cn('overflow-hidden rounded-lg border', query.isFetching && 'opacity-60')}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Sản phẩm</TableHead>
-                <TableHead>Loại</TableHead>
-                <TableHead>Hãng</TableHead>
-                <TableHead>Danh mục</TableHead>
-                <TableHead className="text-center">Biến thể</TableHead>
-                <TableHead className="text-right">Giá bán</TableHead>
-                <TableHead>Trạng thái</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>
-                    <Link href={`/san-pham/${product.id}`} className="group block">
-                      <p className="font-medium group-hover:underline">{product.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {product.manufacturerCode ?? product.slug}
-                      </p>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{PRODUCT_TYPE_LABEL[product.type] ?? product.type}</Badge>
-                  </TableCell>
-                  <TableCell>{product.brand?.name ?? '—'}</TableCell>
-                  <TableCell className="text-sm">{product.category.name}</TableCell>
-                  <TableCell className="text-center">{product.variants.length}</TableCell>
-                  <TableCell className="text-right font-medium whitespace-nowrap">
-                    {priceRange(product.variants.map((variant) => variant.price))}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        product.status === 'ACTIVE'
-                          ? 'default'
-                          : product.status === 'DRAFT'
-                            ? 'secondary'
-                            : 'outline'
-                      }
-                    >
-                      {PRODUCT_STATUS_LABEL[product.status] ?? product.status}
-                    </Badge>
-                  </TableCell>
+        <>
+          {canManage && (
+            <ProductBulkActions selectedIds={[...selected]} onClear={() => setSelected(new Set())} />
+          )}
+          <div className={cn('overflow-hidden rounded-lg border', query.isFetching && 'opacity-60')}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {canManage && (
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Chọn mọi sản phẩm trong trang"
+                        className="size-4"
+                        checked={products.length > 0 && products.every((product) => selected.has(product.id))}
+                        ref={(element) => {
+                          // Trạng thái "chọn một phần" khi chỉ tick vài dòng trong trang
+                          if (element) {
+                            const some = products.some((product) => selected.has(product.id));
+                            const all = products.every((product) => selected.has(product.id));
+                            element.indeterminate = some && !all;
+                          }
+                        }}
+                        onChange={(event) => {
+                          for (const product of products) toggle(product.id, event.target.checked);
+                        }}
+                      />
+                    </TableHead>
+                  )}
+                  <TableHead>Sản phẩm</TableHead>
+                  <TableHead>Loại</TableHead>
+                  <TableHead>Hãng</TableHead>
+                  <TableHead>Danh mục</TableHead>
+                  <TableHead className="text-center">Biến thể</TableHead>
+                  <TableHead className="text-right">Giá bán</TableHead>
+                  <TableHead>Trạng thái</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {products.map((product) => (
+                  <TableRow key={product.id} className={cn(selected.has(product.id) && 'bg-primary/5')}>
+                    {canManage && (
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          aria-label={`Chọn ${product.name}`}
+                          className="size-4"
+                          checked={selected.has(product.id)}
+                          onChange={(event) => toggle(product.id, event.target.checked)}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <Link href={`/san-pham/${product.id}`} className="group flex items-center gap-3">
+                        {product.media[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- ảnh đã được server tối ưu sẵn
+                          <img
+                            src={imageUrl(product.media[0].url, 'sm')}
+                            alt=""
+                            loading="lazy"
+                            className="size-12 shrink-0 rounded border bg-muted object-contain"
+                          />
+                        ) : (
+                          <span className="flex size-12 shrink-0 items-center justify-center rounded border border-dashed">
+                            <ImageIcon className="size-4 text-muted-foreground" />
+                          </span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block font-medium group-hover:underline">{product.name}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {product.manufacturerCode ?? product.slug}
+                          </span>
+                        </span>
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{PRODUCT_TYPE_LABEL[product.type] ?? product.type}</Badge>
+                    </TableCell>
+                    <TableCell>{product.brand?.name ?? '—'}</TableCell>
+                    <TableCell className="text-sm">{product.category.name}</TableCell>
+                    <TableCell className="text-center">{product.variants.length}</TableCell>
+                    <TableCell className="text-right font-medium whitespace-nowrap">
+                      {priceRange(product.variants.map((variant) => variant.price))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          product.status === 'ACTIVE'
+                            ? 'default'
+                            : product.status === 'DRAFT'
+                              ? 'secondary'
+                              : 'outline'
+                        }
+                      >
+                        {PRODUCT_STATUS_LABEL[product.status] ?? product.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
 
-          <Pagination
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={query.data?.total ?? 0}
-            onChange={setPage}
-          />
-        </div>
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={query.data?.total ?? 0}
+              onChange={setPage}
+            />
+          </div>
+        </>
       )}
     </>
   );

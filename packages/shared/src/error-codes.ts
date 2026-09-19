@@ -11,6 +11,8 @@ export const ErrorCode = {
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   ALREADY_EXISTS: 'ALREADY_EXISTS',
   IN_USE: 'IN_USE',
+  /** Bản ghi đã bị người khác sửa sau lúc mình tải về */
+  EDIT_CONFLICT: 'EDIT_CONFLICT',
 
   // Xác thực và phân quyền
   UNAUTHENTICATED: 'UNAUTHENTICATED',
@@ -21,11 +23,13 @@ export const ErrorCode = {
   ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
   SESSION_REVOKED: 'SESSION_REVOKED',
 
+  // Danh mục sản phẩm
+  INVALID_STATUS_TRANSITION: 'INVALID_STATUS_TRANSITION',
+
   // Kho và đơn hàng
   OUT_OF_STOCK: 'OUT_OF_STOCK',
   PRICE_CHANGED: 'PRICE_CHANGED',
   QUOTE_EXPIRED: 'QUOTE_EXPIRED',
-
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -42,6 +46,7 @@ export interface ApiErrorBody {
 export const ErrorMessageVi: Record<ErrorCode, string> = {
   ALREADY_EXISTS: 'Dữ liệu đã tồn tại.',
   IN_USE: 'Dữ liệu đang được sử dụng nên không thể xóa.',
+  EDIT_CONFLICT: 'Dữ liệu vừa được người khác thay đổi. Vui lòng tải lại trang rồi sửa lại.',
   INTERNAL_ERROR: 'Hệ thống đang gặp sự cố, vui lòng thử lại sau.',
   VALIDATION_FAILED: 'Dữ liệu chưa hợp lệ, vui lòng kiểm tra lại.',
   NOT_FOUND: 'Không tìm thấy dữ liệu yêu cầu.',
@@ -49,6 +54,7 @@ export const ErrorMessageVi: Record<ErrorCode, string> = {
   UNAUTHENTICATED: 'Vui lòng đăng nhập để tiếp tục.',
   FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này.',
   TOKEN_EXPIRED: 'Phiên đăng nhập đã hết hạn.',
+  INVALID_STATUS_TRANSITION: 'Không thể chuyển sang trạng thái này.',
   OUT_OF_STOCK: 'Sản phẩm không đủ tồn kho.',
   PRICE_CHANGED: 'Giá sản phẩm vừa thay đổi, vui lòng kiểm tra lại giỏ hàng.',
   QUOTE_EXPIRED: 'Báo giá đã hết hiệu lực.',

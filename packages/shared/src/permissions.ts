@@ -35,7 +35,8 @@ export const Permission = {
 
   // Giá và khuyến mãi
   PRICING_VIEW: 'pricing.view',
-  /// Sửa giá, bảng giá nhóm, flash sale, voucher (chỉ quản trị)
+  /// Bảng giá theo khu vực/nhóm khách, giá theo số lượng, flash sale, voucher (chỉ quản trị).
+  /// Giá bán lẻ niêm yết của biến thể thuộc catalog.manage, nhân viên KD sửa được.
   PRICING_MANAGE: 'pricing.manage',
 
   // Báo giá công trình

@@ -35,6 +35,9 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const { accessToken, headers, ...rest } = options;
 
+  // Gửi file (FormData) thì để trình duyệt tự đặt content-type kèm boundary
+  const isFormData = typeof FormData !== 'undefined' && rest.body instanceof FormData;
+
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -42,7 +45,7 @@ export async function apiRequest<T>(
       // Luôn gửi cookie để refresh token đi kèm
       credentials: 'include',
       headers: {
-        'content-type': 'application/json',
+        ...(isFormData ? {} : { 'content-type': 'application/json' }),
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },

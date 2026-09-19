@@ -133,19 +133,32 @@ export class ImageService {
     });
     if (!asset) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
 
+    // Ảnh sản phẩm lưu theo url (không có khóa ngoại tới media_assets), nên phải đếm riêng
+    const productUsage = await this.db.productMedia.count({ where: { url: asset.url } });
     const used =
-      asset._count.postCovers + asset._count.bannerDesktop + asset._count.bannerMobile;
+      asset._count.postCovers + asset._count.bannerDesktop + asset._count.bannerMobile + productUsage;
     if (used > 0) {
-      throw new AppException(ErrorCode.IN_USE, HttpStatus.CONFLICT, { references: used });
+      throw new AppException(ErrorCode.IN_USE, HttpStatus.CONFLICT, {
+        references: used,
+        products: productUsage,
+        hint:
+          productUsage > 0
+            ? `Ảnh đang dùng cho ${productUsage} sản phẩm/biến thể. Gỡ khỏi sản phẩm trước khi xóa.`
+            : 'Ảnh đang dùng cho bài viết hoặc banner.',
+      });
     }
 
+    // Xóa bản ghi trước, file sau: nếu xóa file lỗi thì chỉ còn file rác, không có bản ghi trỏ tới file đã mất
+    await this.db.mediaAsset.delete({ where: { id } });
     const base = asset.storageKey.replace(/\.webp$/, '');
-    await Promise.all([
+    const results = await Promise.allSettled([
       this.storage.remove(asset.storageKey),
       this.storage.remove(`${base}_md.webp`),
       this.storage.remove(`${base}_sm.webp`),
     ]);
-    await this.db.mediaAsset.delete({ where: { id } });
+    if (results.some((result) => result.status === 'rejected')) {
+      this.logger.warn(`Đã xóa ảnh ${id} nhưng còn sót file trên ổ đĩa: ${base}*`);
+    }
   }
 
   list(page: number, pageSize: number) {

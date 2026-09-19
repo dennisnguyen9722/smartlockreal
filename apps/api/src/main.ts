@@ -22,10 +22,12 @@ async function bootstrap() {
   // Chạy sau Nginx/load balancer: tin 1 lớp proxy để lấy đúng IP khách
   app.set('trust proxy', 1);
 
+  // Helmet mặc định cho toàn bộ API (gồm Cross-Origin-Resource-Policy: same-origin)
   app.use(helmet());
   app.use(cookieParser());
 
-    // Ảnh là file tĩnh, phục vụ trực tiếp. Production nên để Nginx làm việc này.
+  // Ảnh là file tĩnh, phục vụ trực tiếp. Production nên để Nginx làm việc này
+  // (nhớ thêm cùng header Cross-Origin-Resource-Policy ở cấu hình Nginx).
   app.useStaticAssets(path.resolve(env.MEDIA_ROOT), {
     prefix: '/media',
     // Tên file chứa mã băm nội dung nên đổi ảnh là đổi tên: cache thoải mái 1 năm
@@ -33,8 +35,13 @@ async function bootstrap() {
     immutable: true,
     index: false,
     redirect: false,
+    // Admin (:3001) và storefront khác nguồn với API: riêng ảnh được phép nhúng ở trang khác.
+    // Chạy sau Helmet nên ghi đè giá trị same-origin mà Helmet đã đặt.
+    setHeaders: (res) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    },
   });
-  
+
   app.enableCors({
     origin: env.CORS_ORIGINS,
     credentials: true,

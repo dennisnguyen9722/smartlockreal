@@ -1,7 +1,8 @@
 # Bàn giao dự án khoathongminhchinhhang.vn
 
-> File này để bắt đầu một cuộc trò chuyện mới với Claude. Gửi kèm file này
-> và `packages/database/prisma/schema.prisma` là đủ bối cảnh.
+> File này để bắt đầu một cuộc trò chuyện mới với Claude. Gửi kèm file này,
+> `packages/database/prisma/schema.prisma` và file `ktm-context.txt` tạo bằng lệnh ở mục
+> **"Gom code cho cuộc trò chuyện mới"** (cuối file).
 
 ## Bối cảnh
 
@@ -19,6 +20,9 @@ Thư mục: `~/Projects/huyhoang/khoathongminh`
 - Kiểm tra phiên bản thư viện bằng `npm view` **trước khi** cài, vì nhiều thư viện đã
   thay đổi lớn so với kiến thức cũ.
 - Giải thích **vì sao** chọn cách làm, nêu rủi ro, rồi mới viết code.
+- **Giao diện CMS theo thói quen cũ của công ty** (xem hình mẫu Dennis gửi): form kiểu
+  "Tên biến thể / Giá trị", thẻ gập mở, nút "Thêm ..." ở góc phải. Đừng bắt người dùng nghĩ
+  theo mô hình dữ liệu; phần kỹ thuật chạy ngầm phía sau.
 - Giao diện (màu, kiểu chữ, khoảng cách) để **Bước 12** làm một lượt bằng Claude Design.
   Bố cục và cách dùng thì sửa ngay khi làm.
 
@@ -42,17 +46,20 @@ Thư mục: `~/Projects/huyhoang/khoathongminh`
 | BullMQ | 6 | ioredis là phụ thuộc tùy chọn |
 | TanStack Query | 5.103 | |
 | exceljs | **4.4.0 ghim cứng** | Không còn bảo trì, chấp nhận vì chỉ nhân viên dùng |
-| sharp | 0.35 | Xử lý ảnh |
+| sharp | 0.35 | Xử lý ảnh; server chỉ nhận **JPEG, PNG, WebP** |
 | jose + @node-rs/argon2 | 6.2 / 2.2 | JWT và băm mật khẩu |
 
 ## Cấu trúc
-apps/api NestJS :4000 (REST /api/v1, Socket.IO /realtime)
-apps/worker BullMQ (job nền)
-apps/web Next.js :3000 (storefront, CHƯA làm)
-apps/admin Next.js :3001 (CMS)
-packages/shared mã lỗi, hằng số, schema Zod, quyền, menu
-packages/database Prisma schema + migration + seed
-packages/ui Tailwind 4 + shadcn/ui dùng chung
+
+```
+apps/api       NestJS :4000 (REST /api/v1, Socket.IO /realtime)
+apps/worker    BullMQ (job nền)
+apps/web       Next.js :3000 (storefront, CHƯA làm)
+apps/admin     Next.js :3001 (CMS)
+packages/shared    mã lỗi, hằng số, schema Zod, quyền, menu
+packages/database  Prisma schema + migration + seed
+packages/ui        Tailwind 4 + shadcn/ui dùng chung
+```
 
 ## Quyết định nghiệp vụ đã chốt
 
@@ -62,11 +69,13 @@ packages/ui Tailwind 4 + shadcn/ui dùng chung
 | MISA | **Bỏ tích hợp**. Website là nơi quản lý kho và doanh thu |
 | Khách hàng | **Không đăng nhập**. Đặt hàng bằng số điện thoại. Khách công trình do nhân viên quản lý |
 | Nhân viên | 2 vai trò: `SUPER_ADMIN` (31 quyền), `SALE_STAFF` (21 quyền) |
+| Quyền sửa giá | Nhân viên KD sửa được **giá niêm yết** biến thể (có nhật ký `variant.price_change`). Bảng giá nhóm, flash sale, voucher chỉ quản trị (`pricing.manage`) |
 | Bán tại showroom | Cả hai: mua mang về ngay, và **đặt cọc 10–30%** rồi giao hàng |
 | Thanh toán | Tiền mặt, COD, chuyển khoản VietQR, VNPay |
 | Giao hàng | Nội thành tự giao, tỉnh xa gửi đơn vị vận chuyển |
 | VAT | **Giá chưa gồm VAT**, cộng khi khách lấy hóa đơn (công ty chọn, dù Điều 29 Luật Giá 2023 yêu cầu niêm yết đã gồm thuế — đã báo rủi ro) |
 | Giá | Lấy **giá thấp nhất** giữa các lớp, không cộng dồn. Làm tròn **xuống** hàng nghìn |
+| Giá gạch ngang | `compareAtPrice` = giá cũ gạch đi cho khách thấy đang giảm. **Không phải giá KM**; KM có thời hạn làm bằng Flash sale |
 | Khuyến mãi | Flash sale, voucher, quà tặng kèm |
 | Báo giá công trình | Một báo giá → một đơn. Sửa sau khi gửi = tạo phiên bản mới. **Không mua nợ** |
 | Bảo hành | Tính từ **ngày lắp đặt**; không lắp thì từ ngày giao. Không tự kích hoạt nếu chưa lắp |
@@ -75,61 +84,103 @@ packages/ui Tailwind 4 + shadcn/ui dùng chung
 | Ảnh | Lưu **trên server** (`MEDIA_ROOT`), đường dẫn `<năm>/<tháng>/<hash>.webp` |
 | Đánh giá | Chỉ khách đã mua, qua link có mã, nhân viên duyệt trước |
 
+### Sản phẩm và biến thể (chốt ở Bước 5)
+
+| Chủ đề | Quyết định |
+|---|---|
+| Biến thể | Người dùng nhập **"Tên biến thể: Màu sắc / Giá trị: Đen"** + **thuộc tính kết hợp** (App: TTLock). Bên dưới là `product_options` (tối đa **3**) và `product_option_values`. Mỗi biến thể có giá, SKU, ảnh riêng |
+| Thêm thuộc tính cho sản phẩm đã có biến thể | Hỏi "biến thể đang có thuộc giá trị nào"; biến thể cũ giữ SKU, giá, tồn kho, lịch sử. **Không hỗ trợ bớt thuộc tính** (gây trùng tổ hợp) — tắt biến thể thay thế |
+| Mã tùy chọn/giá trị | Sinh từ nhãn, **không bao giờ đổi** (ghép thành `optionKey`). Sửa nhãn thì chỉ đổi phần hiển thị. "ttlock" tự khớp "TTLock" đã có |
+| Tồn kho | **Không nhập ở biến thể**. Đi qua phiếu nhập/chuyển kho theo showroom (Bước 6) |
+| Khóa SKU và serial | Khi biến thể đã có chứng từ hoặc dòng tồn kho |
+| Xóa biến thể | Chỉ khi chưa có giao dịch/khuyến mãi/combo. Còn lại chỉ **tắt**. Không tắt/xóa được biến thể cuối cùng đang bán của sản phẩm đang bán |
+| Trạng thái | Nháp → Đang bán (phải đủ checklist: biến thể bật có giá, có ảnh, đủ thông số bắt buộc, hãng/danh mục đang bật, combo có thành phần). Đang bán ↔ Nháp. Nháp/Đang bán → Lưu trữ (tắt mọi biến thể; chặn nếu nằm trong combo đang bán). **Lưu trữ → chỉ về Nháp** |
+| Đổi slug | Sau khi từng đăng bán thì **tự tạo redirect 301** (`url_redirects`), rút gọn chuỗi, chống vòng lặp. Đường dẫn trang sản phẩm: `productPath()` trong `shared` (`/san-pham/<slug>`) — storefront PHẢI dùng hàm này |
+| Hai người cùng sửa | Client gửi `expectedUpdatedAt`; lệch thì API trả **409 `EDIT_CONFLICT`** |
+| Ảnh sản phẩm | Ảnh đầu tiên là ảnh đại diện. Ảnh gắn biến thể hiện khi khách chọn biến thể. Tối đa 20 ảnh/sản phẩm |
+| Xóa sản phẩm | Chỉ xóa hẳn khi **chưa từng có giao dịch**, không đang bán, không nằm trong voucher (`voucher_targets` là Cascade — xóa sẽ làm voucher mất điều kiện). Còn lại **lưu trữ**. Xóa nhiều: mỗi sản phẩm một transaction, trả về danh sách bỏ qua kèm lý do |
+
 ## Đã hoàn thành
 
 **Bước 1–2: Phân tích và khung dự án** — monorepo, hạ tầng Docker, API NestJS
 (lỗi chuẩn `{code,message,details,traceId}`, Helmet, CORS, health check), worker BullMQ,
 realtime Socket.IO + Redis adapter (đã thử 2 instance), web và admin Next.js.
 
-**Bước 3: Database** — 11 migration, ~80 bảng, 8 nhóm:
-1. Danh mục sản phẩm (hãng, danh mục cây 3 cấp, thông số, sản phẩm, biến thể, combo)
-2. Tồn kho (theo showroom, serial từng chiếc, giữ hàng, **sổ kho bất biến**)
-3. Khách hàng và nhân viên
-4. Giá nhiều lớp, flash sale (chống chồng thời gian), voucher, quà tặng
-5. Đơn hàng, thanh toán, giao hàng (**trigger tự đếm số lượng đã giao**)
-6. Báo giá công trình (phiên bản, duyệt chiết khấu)
-7. Lắp đặt (**chống trùng lịch kỹ thuật viên**), bảo hành, gửi trả hãng
-8. Nội dung, đánh giá, cấu hình, thông báo, outbox, nhật ký
-
-Database **tự bảo vệ nghiệp vụ** bằng CHECK, EXCLUDE, trigger: chống bán vượt tồn kho,
-tổng tiền luôn khớp, sổ kho và nhật ký không sửa được.
+**Bước 3: Database** — 11 migration, ~80 bảng, 8 nhóm. Database **tự bảo vệ nghiệp vụ** bằng
+CHECK, EXCLUDE, trigger: chống bán vượt tồn kho, tổng tiền luôn khớp, sổ kho và nhật ký không sửa được.
 
 **Bước 4: Đăng nhập và phân quyền** — Argon2id, access token 15 phút (giữ trong bộ nhớ),
 refresh token xoay vòng trong cookie HttpOnly, **phát hiện token bị đánh cắp**,
 thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email, nhật ký thao tác.
 
-**Bước 5 (đang làm): Module danh mục sản phẩm**
-- API: hãng, danh mục, thông số (kế thừa từ danh mục cha), sản phẩm, biến thể, ảnh
-- Ảnh: tải lên → WebP 3 kích thước, chống trùng bằng mã băm
-- **Nhập hàng loạt từ Excel**: file mẫu có danh sách chọn, xem trước, ghi trong một transaction
-- CMS: khung menu phân quyền, màn hình Hãng, Danh mục + thông số, danh sách sản phẩm,
-  form thêm sản phẩm (thông số sinh động theo danh mục, điểm nổi bật theo nhóm,
-  bảng biến thể tự tạo mọi tổ hợp)
+**Bước 5: Module danh mục sản phẩm** ✅
+- Hãng, danh mục cây + thông số kế thừa, danh sách sản phẩm có bộ lọc
+- **Trang chi tiết** `/san-pham/[id]`: tab Thông tin / Biến thể / Ảnh (tab lưu trên URL `?tab=`),
+  thẻ Trạng thái với checklist đăng bán, form dùng chung với trang tạo mới (`ProductInfoForm`),
+  chỉ gửi trường đã đổi, cảnh báo thay đổi chưa lưu
+- **Biến thể** dạng thẻ gập mở, hộp thoại Thêm biến thể (tự tạo thuộc tính/giá trị, một transaction),
+  ảnh riêng từng biến thể, sửa nhãn/xóa giá trị, tạo nhanh tổ hợp còn thiếu (khi ≥ 2 thuộc tính)
+- **Tab Ảnh**: tải lên, sắp xếp, chọn ảnh đại diện, gỡ ảnh
+- **Thư viện ảnh** `/thu-vien-anh`: xem, tải lên, sao chép link, xóa (chặn nếu ảnh đang dùng)
+- **Nhập Excel** `/san-pham/nhap-excel`: tải mẫu theo danh mục → xem trước → xác nhận
+
+### API danh mục sản phẩm (`/api/v1/catalog/products`)
+
+| Phương thức | Đường dẫn | Việc |
+|---|---|---|
+| GET | `/` , `/:id` | Danh sách; chi tiết kèm `readiness` và `usage` từng biến thể |
+| POST / PATCH | `/` , `/:id` | Tạo; sửa thông tin (không gồm trạng thái) |
+| POST | `/:id/status` | Đổi trạng thái có kiểm tra |
+| POST | `/:id/variants/quick` | Thêm biến thể theo nhãn (giao diện dùng cái này) |
+| POST | `/:id/variants` , `/:id/variants/batch` | Thêm theo mã tùy chọn; nhiều cái một transaction |
+| PATCH / DELETE | `/variants/:variantId` | Sửa / xóa biến thể |
+| POST | `/:id/options` | Thêm thuộc tính mới |
+| POST / PATCH / DELETE | `/:id/options/:optionId/values` , `/options/values/:valueId` | Giá trị thuộc tính |
+| POST / PATCH / DELETE | `/:id/media` , `/:id/media/order` , `/media/:mediaId` | Ảnh sản phẩm |
 
 ## Việc tiếp theo
 
-1. **Trang chi tiết sản phẩm**: sửa thông tin, quản lý biến thể, gắn ảnh, đổi trạng thái
-2. **Thư viện ảnh** trong CMS
-3. **Màn hình nhập Excel** (API đã xong, cần giao diện)
-4. Nhập ảnh hàng loạt theo tên SKU
+**Bước 6: CMS tồn kho** — tồn theo 3 showroom, phiếu nhập, chuyển kho, kiểm kê, serial từng chiếc,
+sổ kho. Thẻ biến thể sẽ hiện tồn kho theo showroom (chỉ xem).
 
-Sau đó: Bước 6 CMS tồn kho → 7 đơn hàng → 8 báo giá → 9 lắp đặt/bảo hành →
-10 nội dung/cấu hình → 11 thông báo realtime → **12 storefront + thiết kế giao diện**.
+Sau đó: 7 đơn hàng → 8 báo giá → 9 lắp đặt/bảo hành → 10 nội dung/cấu hình →
+11 thông báo realtime → **12 storefront + thiết kế giao diện**.
 
 Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
+
+### Việc tồn (làm khi có thời gian hoặc khi cần)
+
+- Nhập ảnh hàng loạt theo tên file = SKU
+- Đổi tên thuộc tính (vd: "Màu" → "Màu sắc")
+- Màn hình khai báo thành phần combo (checklist combo đang chặn đăng bán)
+- Ô "Nhóm lắp đặt" trong form sản phẩm (làm cùng Bước 9)
+- Sửa alt text ảnh; gán lại ảnh sang biến thể khác
+- Migration thêm `product_media.media_asset_id` (FK Restrict) thay cho việc đối chiếu theo `url`
+- `lib/hooks.ts` `useApiQuery`: `...options` đang ghi đè điều kiện "đã đăng nhập" của `enabled`
+- Cảnh báo rời trang khi còn thay đổi chưa lưu chỉ chạy lúc đóng tab/tải lại, chưa chặn khi bấm menu
 
 ## Quy ước code
 
 - Tiền: `BigInt` VND, không dùng float. Thời gian: lưu UTC, hiển thị `Asia/Ho_Chi_Minh`
 - Bảng và cột PostgreSQL dùng snake_case (`@@map`, `@map`), khóa chính **UUID v7**
 - Schema Zod đặt trong `packages/shared`, **dùng chung** giữa API và giao diện
-- Lỗi API: `AppException(ErrorCode.X, HttpStatus.Y, details)`
+- Lỗi API: `AppException(ErrorCode.X, HttpStatus.Y, details)`. Lỗi từng ô: `details` là mảng `{ field, message }`
 - Cột JSON: dùng `toJsonSafe()` (xử lý BigInt và Date)
 - Ghi nhật ký thao tác quan trọng bằng `AuditService.log()`
 - Endpoint mặc định **yêu cầu đăng nhập**; công khai phải đánh dấu `@Public()`
 - Nút dẫn sang trang khác: **bọc `Button` trong `Link`**, không dùng `asChild`
 - Mỗi service mới phải có mặt ở **3 chỗ** trong module: import, `providers`, `exports`
+  (catalog dùng chung mảng `services` cho providers và exports)
 - Migration đã commit thì **không sửa**, tạo migration mới
+- Logic ghi nhiều bảng: viết hàm lõi `xxxInTx(tx, ...)` chạy trong transaction của nơi gọi,
+  để nhiều thao tác ghép được thành một transaction (xem `VariantService.createInTx`)
+- Trong `catch`: `AppException` ném lại nguyên vẹn, lỗi Prisma mới qua `mapPrismaError`
+- **Thêm bảng mới có khóa ngoại `Restrict` tới `product_variants`** (phiếu kho, đơn, báo giá...)
+  thì PHẢI thêm vào `VARIANT_USAGE_COUNT` trong `apps/api/src/catalog/variant-usage.ts`,
+  nếu không API sẽ cho xóa biến thể rồi database mới chặn
+- Form admin: chỉ gửi trường đã đổi (`buildUpdatePayload`), "có thay đổi chưa lưu" tính từ chính hàm đó
+- Tiền trên giao diện: dùng `PriceInput` (hiển thị `4.990.000`, giá trị là chuỗi chữ số)
+- Gửi file lên API: `authFetch(path, { method: 'POST', body: formData })` — `api.ts` tự bỏ header JSON
 
 ## Bẫy đã gặp (đừng lặp lại)
 
@@ -137,12 +188,20 @@ Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
 |---|---|
 | Sửa `packages/shared` mà không build | Luôn `pnpm build` rồi *Restart TS Server* |
 | Prisma đòi xóa chỉ mục viết tay | Dùng chỉ mục **có điều kiện** (`WHERE`), Prisma sẽ bỏ qua |
-| zsh nuốt `!`, `*`, và biến `path` | Đặt trong nháy đơn, tránh tên biến `path` |
+| zsh nuốt `!`, `*`, `[ ]` và biến `path` | Đặt trong nháy đơn (vd: `'app/san-pham/[id]/page.tsx'`), tránh tên biến `path` |
+| Dán lệnh có dòng `#` vào zsh báo `command not found: #` | Chạy một lần: `echo 'setopt interactivecomments' >> ~/.zshrc` |
 | CLI shadcn không cài thư viện component cần | Sau `add` luôn chạy `pnpm --filter @ktm/ui typecheck` |
 | `noUncheckedIndexedAccess` báo `possibly undefined` | Kiểm tra trước khi dùng, đây là lỗi thật |
 | Menu CMS giật khi chuyển trang | Do trang chưa tồn tại → tạo `page.tsx` trước |
 | `MEDIA_ROOT` tương đối | Dùng **đường dẫn tuyệt đối** |
-| Cổng bị chiếm | `lsof -tiTCP:3001 -sTCP:LISTEN | xargs -r kill` |
+| Cổng bị chiếm | `lsof -tiTCP:3001 -sTCP:LISTEN \| xargs -r kill` |
+| `mapPrismaError` dịch P2003 thành "dữ liệu tham chiếu không tồn tại" | Sai nghĩa khi **xóa**; bắt P2003 riêng và trả `IN_USE` |
+| Liên kết biến thể ↔ giá trị là `Cascade` | Xóa giá trị đang dùng sẽ **âm thầm** làm hỏng tổ hợp; luôn kiểm tra trước |
+| `product_media` lưu `url`, không có FK tới ảnh | Xóa ảnh thư viện phải đếm `product_media` theo `url` (đã làm trong `ImageService.remove`) |
+| Ảnh HEIC từ iPhone bị từ chối | Đổi sang JPG trước (iPhone: Cài đặt → Camera → Định dạng → Tương thích nhất) |
+| `useSearchParams` trong trang client | Bọc component trong `<Suspense>`, nếu không Next.js lỗi khi build |
+| Gom code bằng từ khóa tiếng Anh | Bỏ sót thư mục tên tiếng Việt (`san-pham`, `thu-vien-anh`) → dùng lệnh ở cuối file |
+| Ảnh từ API (:4000) bị chặn `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` | Helmet đặt `Cross-Origin-Resource-Policy: same-origin`. Đã ghi đè thành `cross-origin` CHỈ cho `/media` (`setHeaders` trong `main.ts`). Production dùng Nginx phục vụ ảnh thì thêm `add_header Cross-Origin-Resource-Policy cross-origin;`. Ảnh cache `immutable` 1 năm: sửa header xong phải **Empty Cache and Hard Reload** |
 
 ## Khởi động
 
@@ -156,3 +215,29 @@ Tài khoản thử: `admin@ktm.vn` / `MatKhau@123` (quản trị), `sale@ktm.vn`
 Quản lý tài khoản: `pnpm --filter @ktm/api staff list|create|reset-password`
 
 Xem thêm `README.md` ở thư mục gốc.
+
+## Gom code cho cuộc trò chuyện mới
+
+Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared và các module API liên quan.
+Sửa danh sách `MODULES` theo bước sắp làm (Bước 6: thêm `inventory` hoặc tên thư mục module kho).
+
+```bash
+cd ~/Projects/huyhoang/khoathongminh
+OUT="$HOME/Desktop/ktm-context.txt"
+MODULES='catalog|media|audit|common|auth'
+{
+  echo '##### CAY THU MUC #####'
+  git ls-files --cached --others --exclude-standard apps packages | grep -vE 'node_modules|\.next|dist/'
+  git ls-files --cached --others --exclude-standard \
+    | grep -E "^(apps/admin/src|packages/shared/src|apps/api/src/($MODULES))/" \
+    | grep -E '\.(ts|tsx)$' \
+    | grep -vE '\.(spec|test)\.tsx?$' \
+    | while IFS= read -r f; do
+        echo; echo "##### FILE: $f #####"; cat "$f"
+      done
+  for f in apps/api/src/app.module.ts apps/admin/package.json apps/api/package.json; do
+    echo; echo "##### FILE: $f #####"; cat "$f"
+  done
+} > "$OUT"
+wc -l "$OUT"; du -h "$OUT"
+```
