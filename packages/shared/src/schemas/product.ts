@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SlugSchema } from './catalog';
+import { HighlightsSchema } from './spec';
 
 export const ProductTypeSchema = z.enum(['LOCK', 'ACCESSORY', 'SERVICE', 'BUNDLE']);
 export const ProductStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']);
@@ -58,6 +59,7 @@ export const ProductCreateSchema = z
     seoTitle: z.string().trim().max(200).optional(),
     seoDescription: z.string().trim().max(320).optional(),
     specs: z.record(z.string(), z.unknown()).default({}),
+    highlights: HighlightsSchema.default([]),
     options: z.array(ProductOptionSchema).max(3).default([]),
     variants: z.array(VariantInputSchema).min(1, 'Sản phẩm phải có ít nhất một biến thể').max(100),
   })
@@ -151,6 +153,7 @@ export const ProductUpdateSchema = z.object({
   seoTitle: z.string().trim().max(200).nullable().optional(),
   seoDescription: z.string().trim().max(320).nullable().optional(),
   specs: z.record(z.string(), z.unknown()).optional(),
+  highlights: HighlightsSchema.optional(),
   status: ProductStatusSchema.optional(),
 });
 

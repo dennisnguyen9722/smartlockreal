@@ -162,6 +162,8 @@ model SpecDefinition {
   /// Khóa trong products.specs, vd: unlock_methods
   code         String       @db.VarChar(64)
   name         String       @db.VarChar(120)
+  /// Nhóm hiển thị trong bảng thông số, vd: Vận hành, Kích thước cửa
+  groupName    String?      @map("group_name") @db.VarChar(80)
   dataType     SpecDataType @map("data_type")
   unit         String?      @db.VarChar(20)
   /// Giá trị cho SELECT/MULTI_SELECT: [{ "value": "fingerprint", "label": "Vân tay" }]
@@ -229,6 +231,8 @@ model Product {
   description         String?
   /// Giá trị thông số, khóa theo spec_definitions.code
   specs               Json          @default("{}")
+  /// Điểm nổi bật theo nhóm: [{ "title": "Tính năng", "items": ["..."] }]
+  highlights          Json          @default("[]")
   warrantyMonths      Int           @default(0) @map("warranty_months")
   seoTitle            String?       @map("seo_title") @db.VarChar(200)
   seoDescription      String?       @map("seo_description") @db.VarChar(320)

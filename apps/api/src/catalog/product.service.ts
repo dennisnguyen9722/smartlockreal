@@ -124,6 +124,7 @@ export class ProductService {
             shortDescription: input.shortDescription,
             description: input.description,
             specs: toJsonSafe(validation.value) as JsonObject,
+            highlights: toJsonSafe(input.highlights) as JsonObject[],
             warrantyMonths: input.warrantyMonths ?? 0,
             seoTitle: input.seoTitle,
             seoDescription: input.seoDescription,
@@ -219,7 +220,12 @@ export class ProductService {
     try {
       await this.db.product.update({
         where: { id },
-        data: { ...input, specs, publishedAt },
+        data: {
+          ...input,
+          specs,
+          highlights: input.highlights ? (toJsonSafe(input.highlights) as JsonObject[]) : undefined,
+          publishedAt,
+        },
       });
 
       await this.audit.log({

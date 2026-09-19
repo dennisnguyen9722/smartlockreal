@@ -15,7 +15,6 @@ import {
 } from '@ktm/ui/components/dialog';
 import { Input } from '@ktm/ui/components/input';
 import { Label } from '@ktm/ui/components/label';
-import { cn } from '@ktm/ui/lib/utils';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/data-states';
 import { useAuth } from '@/components/auth-provider';
@@ -29,6 +28,7 @@ interface SpecDefinition {
   categoryId: string;
   code: string;
   name: string;
+  groupName: string | null;
   dataType: SpecDataType;
   unit: string | null;
   options: SpecOption[] | null;
@@ -40,6 +40,7 @@ interface SpecDefinition {
 interface SpecShape {
   code: string;
   name: string;
+  groupName?: string | null;
   dataType: SpecDataType;
   options?: SpecOption[] | null;
   isRequired: boolean;
@@ -54,10 +55,12 @@ const DATA_TYPE_LABEL: Record<SpecDataType, string> = {
 };
 
 const NEEDS_OPTIONS: SpecDataType[] = ['SELECT', 'MULTI_SELECT'];
+const SUGGESTED_GROUPS = ['Vận hành', 'Kích thước cửa', 'Chất liệu', 'Kết nối', 'Nguồn điện'];
 
 const EMPTY_FORM = {
   code: '',
   name: '',
+  groupName: '',
   dataType: 'TEXT' as SpecDataType,
   unit: '',
   isFilterable: false,
@@ -76,19 +79,25 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<SpecDefinition | null>(null);
 
-  // Thông số khai báo tại chính danh mục này
   const own = useApiQuery<SpecDefinition[]>(
     ['specs', categoryId],
     `/catalog/categories/${categoryId}/specs`,
   );
-  // Toàn bộ khuôn, gồm cả thông số kế thừa từ danh mục cha
   const shapes = useApiQuery<SpecShape[]>(
     ['specs', categoryId, 'shapes'],
     `/catalog/categories/${categoryId}/specs/shapes`,
   );
 
-  const ownCodes = new Set((own.data ?? []).map((item) => item.code));
+  const ownList = own.data ?? [];
+  const ownCodes = new Set(ownList.map((item) => item.code));
   const inherited = (shapes.data ?? []).filter((shape) => !ownCodes.has(shape.code));
+
+  // Gom thông số của danh mục này theo nhóm hiển thị
+  const grouped = new Map<string, SpecDefinition[]>();
+  for (const spec of ownList) {
+    const key = spec.groupName?.trim() || 'Thông số chung';
+    grouped.set(key, [...(grouped.get(key) ?? []), spec]);
+  }
 
   const save = useApiMutation<SpecDefinition, typeof EMPTY_FORM>(
     (values) => {
@@ -99,6 +108,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
         isRequired: values.isRequired,
         sortOrder: values.sortOrder,
       };
+      if (values.groupName.trim()) body.groupName = values.groupName.trim();
       if (values.unit.trim()) body.unit = values.unit.trim();
       if (NEEDS_OPTIONS.includes(values.dataType)) body.options = values.options;
       // Mã không đổi được sau khi tạo, vì sản phẩm đang dùng mã đó
@@ -135,7 +145,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
 
   function openCreate() {
     setEditing(null);
-    setForm({ ...EMPTY_FORM, sortOrder: (own.data?.length ?? 0) * 10 });
+    setForm({ ...EMPTY_FORM, sortOrder: ownList.length * 10 });
     setFieldErrors({});
     setFormOpen(true);
   }
@@ -145,6 +155,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
     setForm({
       code: spec.code,
       name: spec.name,
+      groupName: spec.groupName ?? '',
       dataType: spec.dataType,
       unit: spec.unit ?? '',
       isFilterable: spec.isFilterable,
@@ -160,6 +171,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
     const parsed = SpecDefinitionCreateSchema.safeParse({
       code: editing?.code ?? form.code.trim(),
       name: form.name.trim(),
+      ...(form.groupName.trim() ? { groupName: form.groupName.trim() } : {}),
       dataType: form.dataType,
       ...(form.unit.trim() ? { unit: form.unit.trim() } : {}),
       ...(NEEDS_OPTIONS.includes(form.dataType) ? { options: form.options } : {}),
@@ -177,7 +189,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
     save.mutate(form);
   }
 
-  /** Tự tạo mã từ tên khi thêm mới, vd: "Thời lượng pin" -> "thoi_luong_pin" */
+  /** Tự tạo mã từ tên khi thêm mới: "Thời lượng pin" -> "thoi_luong_pin" */
   function onNameChange(name: string) {
     const next = { ...form, name };
     if (!editing && !form.code) {
@@ -198,13 +210,18 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
   }
 
   function updateOption(index: number, patch: Partial<SpecOption>) {
-    const options = form.options.map((option, i) => (i === index ? { ...option, ...patch } : option));
-    setForm({ ...form, options });
+    setForm({
+      ...form,
+      options: form.options.map((option, i) => (i === index ? { ...option, ...patch } : option)),
+    });
   }
 
   function removeOption(index: number) {
     setForm({ ...form, options: form.options.filter((_, i) => i !== index) });
   }
+
+  const existingGroups = [...new Set(ownList.map((item) => item.groupName).filter(Boolean))] as string[];
+  const groupSuggestions = [...new Set([...existingGroups, ...SUGGESTED_GROUPS])];
 
   return (
     <div className="space-y-4">
@@ -245,41 +262,52 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
         <LoadingRows rows={3} />
       ) : own.isError ? (
         <ErrorState message={own.error.message} />
-      ) : (own.data ?? []).length === 0 ? (
+      ) : ownList.length === 0 ? (
         <EmptyState
           message="Danh mục này chưa có thông số riêng"
           action={canManage ? <Button onClick={openCreate}>Thêm thông số</Button> : undefined}
         />
       ) : (
-        <div className="divide-y rounded-lg border">
-          {(own.data ?? []).map((spec) => (
-            <div key={spec.id} className="flex items-start gap-3 p-3">
-              <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{spec.name}</span>
-                  {spec.isRequired && <span className="text-destructive">*</span>}
-                  <Badge variant="secondary">{DATA_TYPE_LABEL[spec.dataType]}</Badge>
-                  {spec.unit && <Badge variant="outline">{spec.unit}</Badge>}
-                  {spec.isFilterable && <Badge variant="outline">Bộ lọc</Badge>}
-                </div>
-                <p className="font-mono text-xs text-muted-foreground">{spec.code}</p>
-                {spec.options && spec.options.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {spec.options.map((option) => option.label).join(' · ')}
-                  </p>
-                )}
-              </div>
-              {canManage && (
-                <div className="flex shrink-0 gap-0.5">
-                  <Button variant="ghost" onClick={() => openEdit(spec)} aria-label="Sửa">
-                    <Pencil className="size-4" />
-                  </Button>
-                  <Button variant="ghost" onClick={() => setDeleting(spec)} aria-label="Xóa">
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                </div>
+        <div className="space-y-3">
+          {[...grouped.entries()].map(([groupName, specs]) => (
+            <div key={groupName}>
+              {grouped.size > 1 && (
+                <p className="mb-1 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {groupName}
+                </p>
               )}
+              <div className="divide-y rounded-lg border">
+                {specs.map((spec) => (
+                  <div key={spec.id} className="flex items-start gap-3 p-3">
+                    <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{spec.name}</span>
+                        {spec.isRequired && <span className="text-destructive">*</span>}
+                        <Badge variant="secondary">{DATA_TYPE_LABEL[spec.dataType]}</Badge>
+                        {spec.unit && <Badge variant="outline">{spec.unit}</Badge>}
+                        {spec.isFilterable && <Badge variant="outline">Bộ lọc</Badge>}
+                      </div>
+                      <p className="font-mono text-xs text-muted-foreground">{spec.code}</p>
+                      {spec.options && spec.options.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {spec.options.map((option) => option.label).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    {canManage && (
+                      <div className="flex shrink-0 gap-0.5">
+                        <Button variant="ghost" onClick={() => openEdit(spec)} aria-label="Sửa">
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button variant="ghost" onClick={() => setDeleting(spec)} aria-label="Xóa">
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -318,6 +346,24 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
                   : 'Chữ thường, số và gạch dưới. Dùng trong file Excel và bộ lọc website.'}
               </p>
               {fieldErrors.code && <p className="text-xs text-destructive">{fieldErrors.code}</p>}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Nhóm hiển thị</Label>
+              <Input
+                value={form.groupName}
+                onChange={(event) => setForm({ ...form, groupName: event.target.value })}
+                placeholder="Vận hành, Kích thước cửa, Chất liệu..."
+                list="spec-group-suggestions"
+              />
+              <datalist id="spec-group-suggestions">
+                {groupSuggestions.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Gom thông số thành bảng như tờ giới thiệu sản phẩm. Bỏ trống thì vào nhóm chung.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -384,11 +430,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
                           onChange={(event) => updateOption(index, { label: event.target.value })}
                           placeholder="Vân tay"
                         />
-                        <Button
-                          variant="ghost"
-                          onClick={() => removeOption(index)}
-                          aria-label="Xóa giá trị"
-                        >
+                        <Button variant="ghost" onClick={() => removeOption(index)} aria-label="Xóa giá trị">
                           <X className="size-4" />
                         </Button>
                       </div>
@@ -398,9 +440,7 @@ export function SpecPanel({ categoryId, categoryName }: { categoryId: string; ca
                 <p className="text-xs text-muted-foreground">
                   Cột trái là mã (dùng trong Excel), cột phải là tên hiển thị cho khách.
                 </p>
-                {fieldErrors.options && (
-                  <p className="text-xs text-destructive">{fieldErrors.options}</p>
-                )}
+                {fieldErrors.options && <p className="text-xs text-destructive">{fieldErrors.options}</p>}
               </div>
             )}
 

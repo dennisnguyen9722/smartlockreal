@@ -42,6 +42,7 @@ export class SpecDefinitionService {
           categoryId,
           code: input.code,
           name: input.name,
+          groupName: input.groupName,
           dataType: input.dataType,
           unit: input.unit,
           options: input.options ? (toJsonSafe(input.options) as JsonObject[]) : undefined,
@@ -149,6 +150,7 @@ export class SpecDefinitionService {
         byCode.set(definition.code, {
           code: definition.code,
           name: definition.name,
+          groupName: definition.groupName,
           dataType: definition.dataType,
           options: definition.options as SpecDefinitionShape['options'],
           isRequired: definition.isRequired,

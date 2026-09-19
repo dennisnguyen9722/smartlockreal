@@ -15,6 +15,8 @@ const SpecDefinitionBase = z.object({
   /** Khóa trong products.specs, vd: unlock_methods */
   code: z.string().regex(/^[a-z][a-z0-9_]*$/, 'Mã thông số: chữ thường, số, gạch dưới').max(64),
   name: z.string().trim().min(1, 'Chưa nhập tên thông số').max(120),
+  /// Nhóm hiển thị, vd: Vận hành, Kích thước cửa
+  groupName: z.string().trim().max(80).optional(),
   dataType: SpecDataTypeSchema,
   /** Đơn vị hiển thị: mm, tháng, kg... */
   unit: z.string().trim().max(20).optional(),
@@ -56,6 +58,7 @@ export type SpecDefinitionUpdateInput = z.infer<typeof SpecDefinitionUpdateSchem
 export interface SpecDefinitionShape {
   code: string;
   name: string;
+  groupName?: string | null;
   dataType: SpecDataTypeValue;
   options?: SpecOption[] | null;
   isRequired: boolean;
@@ -159,3 +162,13 @@ export function validateSpecs(
 
   return { valid: errors.length === 0, errors, value };
 }
+
+/** Một nhóm điểm nổi bật của sản phẩm */
+export const HighlightGroupSchema = z.object({
+  title: z.string().trim().min(1, 'Chưa nhập tên nhóm').max(80),
+  items: z.array(z.string().trim().min(1).max(500)).min(1, 'Nhóm phải có ít nhất một dòng').max(20),
+});
+
+export const HighlightsSchema = z.array(HighlightGroupSchema).max(10);
+
+export type HighlightGroup = z.infer<typeof HighlightGroupSchema>;
