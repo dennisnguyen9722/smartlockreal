@@ -184,12 +184,19 @@ export const ProductStatusChangeSchema = z.object({
   expectedUpdatedAt: ExpectedUpdatedAtSchema.optional(),
 });
 
+/**
+ * Lọc trạng thái ở danh sách. Bỏ trống = mọi trạng thái TRỪ lưu trữ (an toàn cho các ô chọn
+ * sản phẩm khi tạo đơn, báo giá, combo). ALL = kể cả lưu trữ (trang danh sách quản trị).
+ */
+export const ProductListStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED', 'ALL']);
+export type ProductListStatus = z.infer<typeof ProductListStatusSchema>;
+
 export const ProductListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().trim().max(200).optional(),
   type: ProductTypeSchema.optional(),
-  status: ProductStatusSchema.optional(),
+  status: ProductListStatusSchema.optional(),
   brandId: z.uuid().optional(),
   categoryId: z.uuid().optional(),
 });
@@ -365,3 +372,6 @@ export interface ProductBulkDeleteResult {
   deleted: { id: string; name: string }[];
   skipped: { id: string; name: string; code: ProductDeleteBlockCode; message: string }[];
 }
+
+/** Số sản phẩm theo trạng thái, tính theo các bộ lọc khác (tìm kiếm, loại, hãng, danh mục) */
+export type ProductStatusCounts = Record<ProductStatusValue | 'ALL', number>;

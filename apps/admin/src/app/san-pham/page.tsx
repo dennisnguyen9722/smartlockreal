@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FileSpreadsheet, Filter, ImageIcon, Plus, Search, X } from 'lucide-react';
-import { imageUrl, type Paginated } from '@ktm/shared';
+import {
+  imageUrl,
+  type Paginated,
+  type ProductListStatus,
+  type ProductStatusCounts,
+} from '@ktm/shared';
 import { Badge } from '@ktm/ui/components/badge';
 import { Button } from '@ktm/ui/components/button';
 import { Input } from '@ktm/ui/components/input';
@@ -60,6 +65,14 @@ interface CategoryOption {
 
 const PAGE_SIZE = 20;
 
+/** Tab trạng thái; mặc định "Tất cả" gồm cả lưu trữ để không có sản phẩm nào bị ẩn khỏi người dùng */
+const STATUS_TABS: { value: ProductListStatus; label: string }[] = [
+  { value: 'ALL', label: 'Tất cả' },
+  { value: 'ACTIVE', label: 'Đang bán' },
+  { value: 'DRAFT', label: 'Nháp' },
+  { value: 'ARCHIVED', label: 'Lưu trữ' },
+];
+
 export default function ProductListPage() {
   const { can } = useAuth();
   const canManage = can('catalog.manage');
@@ -68,7 +81,7 @@ export default function ProductListPage() {
   const search = useDebounced(searchInput);
   const [page, setPage] = useState(1);
   const [type, setType] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<ProductListStatus>('ALL');
   const [brandId, setBrandId] = useState('');
   const [categoryId, setCategoryId] = useState('');
 
@@ -94,11 +107,11 @@ export default function ProductListPage() {
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
   if (search) params.set('search', search);
   if (type) params.set('type', type);
-  if (status) params.set('status', status);
+  params.set('status', status);
   if (brandId) params.set('brandId', brandId);
   if (categoryId) params.set('categoryId', categoryId);
 
-  const query = useApiQuery<Paginated<ProductListItem>>(
+  const query = useApiQuery<Paginated<ProductListItem> & { statusCounts: ProductStatusCounts }>(
     ['products', { page, search, type, status, brandId, categoryId }],
     `/catalog/products?${params.toString()}`,
     // Giữ dữ liệu cũ khi đổi trang, tránh bảng nhấp nháy
@@ -120,13 +133,13 @@ export default function ProductListPage() {
   };
   walkCategories(categories.data ?? [], 0);
 
-  const hasFilter = Boolean(search || type || status || brandId || categoryId);
+  // Tab trạng thái không tính là bộ lọc (luôn có một tab được chọn)
+  const hasFilter = Boolean(search || type || brandId || categoryId);
   const products = query.data?.items ?? [];
 
   function clearFilters() {
     setSearchInput('');
     setType('');
-    setStatus('');
     setBrandId('');
     setCategoryId('');
     setPage(1);
@@ -183,13 +196,6 @@ export default function ProductListPage() {
           />
 
           <FilterSelect
-            value={status}
-            onChange={(value) => updateFilter(setStatus, value)}
-            placeholder="Mọi trạng thái"
-            options={Object.entries(PRODUCT_STATUS_LABEL).map(([value, label]) => ({ value, label }))}
-          />
-
-          <FilterSelect
             value={brandId}
             onChange={(value) => updateFilter(setBrandId, value)}
             placeholder="Mọi hãng"
@@ -215,13 +221,49 @@ export default function ProductListPage() {
         </div>
       </div>
 
+      {/* Tab trạng thái kèm số đếm: sản phẩm ở trạng thái nào cũng thấy được */}
+      <div role="tablist" className="mb-4 flex gap-1 overflow-x-auto border-b">
+        {STATUS_TABS.map((tab) => {
+          const count = query.data?.statusCounts[tab.value];
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={status === tab.value}
+              onClick={() => {
+                setStatus(tab.value);
+                setPage(1);
+              }}
+              className={cn(
+                '-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                status === tab.value
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {tab.label}
+              {count !== undefined && (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs tabular-nums">{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {query.isPending ? (
         <LoadingRows rows={6} />
       ) : query.isError ? (
         <ErrorState message={query.error.message} />
       ) : products.length === 0 ? (
         <EmptyState
-          message={hasFilter ? 'Không tìm thấy sản phẩm nào khớp bộ lọc' : 'Chưa có sản phẩm nào'}
+          message={
+            hasFilter
+              ? 'Không tìm thấy sản phẩm nào khớp bộ lọc'
+              : status !== 'ALL'
+                ? `Không có sản phẩm nào ở trạng thái "${STATUS_TABS.find((tab) => tab.value === status)?.label}"`
+                : 'Chưa có sản phẩm nào'
+          }
           action={
             hasFilter ? (
               <Button variant="outline" onClick={clearFilters}>
@@ -275,7 +317,14 @@ export default function ProductListPage() {
               </TableHeader>
               <TableBody>
                 {products.map((product) => (
-                  <TableRow key={product.id} className={cn(selected.has(product.id) && 'bg-primary/5')}>
+                  <TableRow
+                    key={product.id}
+                    className={cn(
+                      selected.has(product.id) && 'bg-primary/5',
+                      // Lưu trữ: vẫn hiện nhưng làm mờ để phân biệt với hàng đang dùng
+                      product.status === 'ARCHIVED' && 'opacity-60',
+                    )}
+                  >
                     {canManage && (
                       <TableCell>
                         <input

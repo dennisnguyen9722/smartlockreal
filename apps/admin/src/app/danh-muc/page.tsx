@@ -56,6 +56,8 @@ export default function CategoryPage() {
   const query = useApiQuery<CategoryNode[]>(
     ['categories', 'tree'],
     '/catalog/categories/tree?includeInactive=true',
+    // Trang quản trị: số sản phẩm phải đúng lúc xem, không dùng bản lưu tạm (staleTime 30 giây)
+    { refetchOnMount: 'always' },
   );
 
   const tree = query.data ?? [];
@@ -210,7 +212,9 @@ export default function CategoryPage() {
               </span>
               <span className="font-mono text-xs text-muted-foreground">{node.slug}</span>
               {node._count.products > 0 && (
-                <Badge variant="outline">{node._count.products} sản phẩm</Badge>
+                <span title="Tính cả sản phẩm đã lưu trữ">
+                  <Badge variant="outline">{node._count.products} sản phẩm</Badge>
+                </span>
               )}
               {!node.isActive && <Badge variant="outline">Đã tắt</Badge>}
             </div>
@@ -378,8 +382,8 @@ export default function CategoryPage() {
         title="Xóa danh mục"
         description={
           <>
-            Xóa danh mục <strong>{deleting?.name}</strong>? Danh mục còn sản phẩm hoặc còn danh mục con
-            thì không xóa được, hãy tắt hoạt động thay thế.
+            Xóa danh mục <strong>{deleting?.name}</strong>? Danh mục còn sản phẩm (kể cả sản phẩm đã lưu
+            trữ) hoặc còn danh mục con thì không xóa được, hãy tắt hoạt động thay thế.
           </>
         }
         confirmLabel="Xóa"
@@ -434,7 +438,7 @@ function showError(error: Error, setFieldErrors?: (errors: Record<string, string
   if (error instanceof ApiError && error.code === 'IN_USE') {
     const detail = error.details as { products?: number; children?: number } | undefined;
     toast.error(
-      `Không xóa được: còn ${detail?.products ?? 0} sản phẩm và ${detail?.children ?? 0} danh mục con.`,
+      `Không xóa được: còn ${detail?.products ?? 0} sản phẩm (kể cả đã lưu trữ) và ${detail?.children ?? 0} danh mục con.`,
     );
     return;
   }

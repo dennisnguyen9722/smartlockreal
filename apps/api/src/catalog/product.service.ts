@@ -13,6 +13,7 @@ import {
   type ProductDeleteBlock,
   type ProductListQuery,
   type ProductStatusChangeInput,
+  type ProductStatusCounts,
   type ProductStatusValue,
   type ProductUpdateInput,
 } from '@ktm/shared';
@@ -82,10 +83,10 @@ export class ProductService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(query: ProductListQuery): Promise<Paginated<unknown>> {
-    const where: Prisma.ProductWhereInput = {
+  async list(query: ProductListQuery): Promise<Paginated<unknown> & { statusCounts: ProductStatusCounts }> {
+    // Mọi bộ lọc trừ trạng thái: dùng chung cho danh sách và số đếm từng tab trạng thái
+    const baseWhere: Prisma.ProductWhereInput = {
       ...(query.type ? { type: query.type } : {}),
-      ...(query.status ? { status: query.status } : { status: { not: 'ARCHIVED' } }),
       ...(query.brandId ? { brandId: query.brandId } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
       ...(query.search
@@ -98,6 +99,15 @@ export class ProductService {
           }
         : {}),
     };
+
+    // Bỏ trống: ẩn lưu trữ (an toàn cho ô chọn sản phẩm khi tạo đơn, báo giá). ALL: lấy hết.
+    const statusWhere: Prisma.ProductWhereInput =
+      query.status === 'ALL'
+        ? {}
+        : query.status
+          ? { status: query.status }
+          : { status: { not: 'ARCHIVED' } };
+    const where: Prisma.ProductWhereInput = { ...baseWhere, ...statusWhere };
 
     const [items, total] = await Promise.all([
       this.db.product.findMany({
@@ -118,8 +128,20 @@ export class ProductService {
       }),
       this.db.product.count({ where }),
     ]);
+    // groupBy để riêng: kiểu generic của groupBy hay làm TypeScript suy luận sai khi nằm trong Promise.all
+    const grouped = await this.db.product.groupBy({
+      by: ['status'],
+      where: baseWhere,
+      _count: { _all: true },
+    });
 
-    return { items, total, page: query.page, pageSize: query.pageSize };
+    const statusCounts: ProductStatusCounts = { ALL: 0, DRAFT: 0, ACTIVE: 0, ARCHIVED: 0 };
+    for (const row of grouped) {
+      statusCounts[row.status] = row._count._all;
+      statusCounts.ALL += row._count._all;
+    }
+
+    return { items, total, page: query.page, pageSize: query.pageSize, statusCounts };
   }
 
   /**

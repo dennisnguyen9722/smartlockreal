@@ -67,6 +67,8 @@ export default function BrandPage() {
   const query = useApiQuery<Paginated<Brand>>(
     listKey,
     `/catalog/brands?pageSize=100&includeInactive=true${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+    // Trang quản trị: số sản phẩm phải đúng lúc xem, không dùng bản lưu tạm (staleTime 30 giây)
+    { refetchOnMount: 'always' },
   );
 
   const save = useApiMutation<Brand, typeof EMPTY_FORM>(
@@ -212,7 +214,9 @@ export default function BrandPage() {
                 <TableHead>Tên hãng</TableHead>
                 <TableHead>Đường dẫn</TableHead>
                 <TableHead>Xuất xứ</TableHead>
-                <TableHead className="text-center">Sản phẩm</TableHead>
+                <TableHead className="text-center" title="Tính cả sản phẩm đã lưu trữ">
+                  Sản phẩm
+                </TableHead>
                 <TableHead>Ủy quyền</TableHead>
                 <TableHead>Trạng thái</TableHead>
                 {canManage && <TableHead className="w-24" />}
@@ -224,7 +228,9 @@ export default function BrandPage() {
                   <TableCell className="font-medium">{brand.name}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{brand.slug}</TableCell>
                   <TableCell>{brand.countryOfOrigin ?? '—'}</TableCell>
-                  <TableCell className="text-center">{brand._count.products}</TableCell>
+                  <TableCell className="text-center" title="Tính cả sản phẩm đã lưu trữ">
+                    {brand._count.products}
+                  </TableCell>
                   <TableCell>
                     {brand.isAuthorized ? (
                       <Badge>Chính hãng</Badge>
