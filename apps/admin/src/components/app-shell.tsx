@@ -9,6 +9,7 @@ import { Button } from '@ktm/ui/components/button';
 import { Separator } from '@ktm/ui/components/separator';
 import { cn } from '@ktm/ui/lib/utils';
 import { useAuth } from './auth-provider';
+import { RealtimeStatus } from './realtime-status';
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: 'Quản trị hệ thống',
@@ -124,6 +125,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
 
           <div className="ml-auto flex items-center gap-3">
+            {/* Trạng thái kết nối realtime và nút bật chuông báo đơn mới */}
+            <RealtimeStatus />
+            <Separator orientation="vertical" className="h-8" />
             <div className="text-right text-sm">
               <p className="font-medium leading-tight">{staff.fullName}</p>
               <p className="text-xs text-muted-foreground">

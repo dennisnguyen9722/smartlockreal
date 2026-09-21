@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { CalendarClock, Search, TriangleAlert } from 'lucide-react';
+import { CalendarClock, Plus, Search, TriangleAlert } from 'lucide-react';
 import {
     formatVnPhone,
     ORDER_STATUS_LABEL,
@@ -14,6 +14,7 @@ import {
     type SalesChannelValue,
 } from '@ktm/shared';
 import { Badge } from '@ktm/ui/components/badge';
+import { Button } from '@ktm/ui/components/button';
 import { Input } from '@ktm/ui/components/input';
 import {
     Table,
@@ -24,6 +25,7 @@ import {
     TableRow,
 } from '@ktm/ui/components/table';
 import { cn } from '@ktm/ui/lib/utils';
+import { useAuth } from '@/components/auth-provider';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/data-states';
 import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
@@ -90,6 +92,7 @@ function timeAgo(value: string): string {
 }
 
 export default function OrderListPage() {
+    const { can } = useAuth();
     const [searchInput, setSearchInput] = useState('');
     const search = useDebounced(searchInput.trim());
     const [status, setStatus] = useState<OrderListStatus>('OPEN');
@@ -114,7 +117,20 @@ export default function OrderListPage() {
 
     return (
         <>
-            <PageHeader title="Đơn hàng" description="Đơn từ website, Zalo, tại showroom và công trình" />
+            <PageHeader
+                title="Đơn hàng"
+                description="Đơn từ website, Zalo, tại showroom và công trình"
+                actions={
+                    can('order.manage') && (
+                        <Link href="/don-hang/moi">
+                            <Button>
+                                <Plus className="size-4" />
+                                Tạo đơn
+                            </Button>
+                        </Link>
+                    )
+                }
+            />
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <div className="relative min-w-64 flex-1">

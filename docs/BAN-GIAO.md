@@ -89,6 +89,12 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | Báo giá công trình | Một báo giá → một đơn. Sửa sau khi gửi = tạo phiên bản mới. **Không mua nợ** |
 | Bảo hành, đổi trả | **Do hãng xử lý.** Công ty chỉ cần **tra cứu** theo số điện thoại hoặc serial (máy nào, ngày giao) để báo hãng |
 | Lắp đặt | Do **kỹ thuật của hãng**. Không có lịch kỹ thuật viên; đơn chỉ lưu ngày hẹn và ghi chú kỹ thuật hãng |
+| Không bán nợ | Chỉ **Hoàn tất** được khi đã thu đủ tiền. Hủy đơn đã thu tiền phải **ghi hoàn tiền trước** |
+| Quyền hủy đơn | Cần `order.cancel` (hiện chỉ quản trị). Nhân viên KD thấy nút chuyển bước nhưng không thấy nút Hủy |
+| Sửa sản phẩm trong đơn | Chỉ ở *Chờ xác nhận* và *Đã xác nhận*. Dòng có sẵn **giữ đúng giá đã chốt**, dù giá niêm yết đổi sau đó |
+| Ghi nhận thanh toán | Nhân viên ghi khoản **đã thực nhận** (tiền mặt, chuyển khoản, COD). Không thu vượt, không hoàn quá. Ghi nhầm thì **hủy khoản** (giữ dấu vết), không xóa. Chuyển khoản tự sinh nội dung CK duy nhất `DH2609210003 1` |
+| Serial | Nhập tay, **mỗi máy một ô**, không bắt buộc đủ. Mở từ *Hàng về*, sau Hoàn tất vẫn ghi bổ sung được. Công ty **không dùng máy quét mã vạch** |
+| Địa chỉ | 2 cấp **34 tỉnh / 3.321 phường-xã** (Nghị quyết 202/2025/QH15). Dữ liệu cố định trong `apps/api/src/geo/vn-admin-units.ts`, trích từ gói MIT `vietnam-address-database@1.0.0` (không cài gói vào dự án) |
 | Ảnh | Lưu **trên server** (`MEDIA_ROOT`), đường dẫn `<năm>/<tháng>/<hash>.webp` |
 | Đánh giá | Chỉ khách đã mua, qua link có mã, nhân viên duyệt trước |
 
@@ -133,6 +139,34 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 - **Thư viện ảnh** `/thu-vien-anh`: xem, tải lên, sao chép link, xóa (chặn nếu ảnh đang dùng)
 - **Nhập Excel** `/san-pham/nhap-excel`: tải mẫu theo danh mục → xem trước → xác nhận
 
+**Bước 6: Đơn hàng** ✅
+- Chuyển mô hình sang **nhận đơn rồi đặt hãng**; migration `orders_brand_sourcing`; bỏ menu Kho, Dịch vụ
+- **Lõi tạo đơn** `OrderService.createInTx` dùng chung cho web và nhân viên: tìm/tạo khách theo SĐT
+  (`INSERT ... ON CONFLICT` trên unique index có điều kiện), chụp tên/SKU/giá, sinh mã `DH-yymmdd-0001`
+- **Đặt hàng từ website** `POST /shop/orders` (công khai): mã chống trùng `idempotencyKey`, 5 đơn/10 phút/IP,
+  ô bẫy chống bot, `.strict()` (không cho khách gửi giá), bắt buộc đồng ý chính sách dữ liệu (Nghị định 13/2023)
+- **Thông báo realtime** `order:created` tới mọi vai trò có `order.view`: danh sách tự cập nhật; đơn web có
+  thông báo nổi + chuông (nút 🔔 để mở khóa âm thanh) + thông báo hệ điều hành khi đang ở tab khác
+- **Danh sách đơn** `/don-hang`: tab trạng thái kèm số đếm (mặc định *Đang xử lý*), tìm theo mã/SĐT/tên, lọc kênh, "đơn của tôi"
+- **Chi tiết đơn** `/don-hang/[id]`: thanh quy trình + nút bước tiếp/lùi bước/hủy, sản phẩm + sửa sản phẩm, giao lắp
+  (chọn tỉnh → phường), hóa đơn VAT, thanh toán (tự điền số tiền theo khoản thu), serial, nội bộ, lịch sử
+- **Tạo đơn** `/don-hang/moi`: nhận ra khách cũ theo SĐT (gợi ý tên, địa chỉ lần trước), tìm sản phẩm theo tên/SKU, sửa giá
+- Chống ghi đè bằng cột `orders.version` (`expectedVersion` → `EDIT_CONFLICT`)
+
+### API đơn hàng (`/api/v1`)
+
+| Phương thức | Đường dẫn | Việc |
+|---|---|---|
+| POST | `/shop/orders` | **Công khai**: khách đặt trên website |
+| GET | `/geo/provinces`, `/geo/provinces/:code/wards` | **Công khai**: tỉnh/thành, phường/xã (cache 1 ngày) |
+| GET / POST | `/orders` | Danh sách (kèm `statusCounts`); nhân viên tạo đơn |
+| GET | `/orders/customer-lookup?phone=`, `/orders/pickup-locations`, `/orders/assignees` | Tra khách cũ, showroom nhận hàng, người phụ trách |
+| GET / PATCH | `/orders/:id` | Chi tiết (kèm `allowedTransitions`, `nextStepBlockers`, `balanceDue`); sửa thông tin, VAT |
+| PUT | `/orders/:id/lines` | Thay toàn bộ sản phẩm (trước *Đã đặt hãng*) |
+| POST | `/orders/:id/status` | Chuyển trạng thái theo `ORDER_TRANSITIONS` trong `shared` |
+| POST | `/orders/:id/payments`, `/orders/payments/:paymentId/cancel` | Ghi nhận / hủy khoản thu |
+| PATCH | `/orders/lines/:lineId/serials` | Serial từng máy |
+
 ### API danh mục sản phẩm (`/api/v1/catalog/products`)
 
 | Phương thức | Đường dẫn | Việc |
@@ -151,8 +185,8 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 
 | Bước | Nội dung |
 |---|---|
-| **6. Đơn hàng** (đang làm) | Migration `orders_brand_sourcing` ✅ → danh sách đơn có tab trạng thái → chi tiết đơn (đổi trạng thái theo quy trình, ghi thanh toán/cọc, hẹn giao lắp, serial) → tạo đơn từ Zalo/tại showroom → **thông báo realtime khi có đơn web** |
-| **7. Khách hàng + Báo giá công trình** | Khách tự tạo theo số điện thoại khi đặt; báo giá có phiên bản, chuyển thành đơn |
+| 6. Đơn hàng | ✅ Xong |
+| **7. Khách hàng + Báo giá công trình** (tiếp theo) | Danh sách, chi tiết khách (lịch sử đơn, địa chỉ, khách doanh nghiệp có MST); báo giá công trình có phiên bản, duyệt chiết khấu, chuyển thành đơn (dùng lại `OrderService.createInTx`) |
 | **8. Nội dung + Cấu hình** | Showroom (SEO), bài viết, banner, đánh giá, thông tin công ty, **tra cứu bảo hành** |
 | **9. Storefront + thiết kế giao diện** | Website bán hàng, form đặt hàng ngắn gọn |
 
@@ -176,6 +210,11 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Cảnh báo rời trang khi còn thay đổi chưa lưu chỉ chạy lúc đóng tab/tải lại, chưa chặn khi bấm menu
 - Trang Hãng/Danh mục hiển thị tách "N sản phẩm · M lưu trữ"
 - Có thể viết thêm migration CHECK thời gian cho `ORDERED_FROM_BRAND`/`GOODS_ARRIVED` (sau khi enum đã có)
+- Sự kiện realtime khi đơn **đổi trạng thái** (hiện chỉ có `order:created`), để nhân viên khác thấy ngay
+- Sửa showroom nhận hàng ở trang chi tiết đơn (API đã nhận `fulfillmentLocationId`, giao diện chưa có)
+- Đổi hình thức nhận hàng (giao tận nơi ↔ nhận tại showroom) sau khi đã tạo đơn
+- Cân nhắc cho nhân viên KD quyền `order.cancel`
+- In phiếu giao hàng / phiếu xác nhận đơn cho khách
 
 ## Quy ước code
 
@@ -204,6 +243,17 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Trang quản trị có số đếm (Hãng, Danh mục...) dùng `refetchOnMount: 'always'` vì admin cache `staleTime` 30 giây
 - Thêm giá trị enum trong PostgreSQL: **không dùng giá trị mới trong cùng migration**
 - Migration: sửa `schema.prisma` → `prisma migrate dev --create-only` → nối phần SQL viết tay (CHECK, trigger) → `prisma migrate dev`
+  → **`pnpm --filter @ktm/database build`**
+- Khóa lạc quan cho đơn: mọi thao tác ghi gửi `expectedVersion`; service dùng `bumpVersion()` (`updateMany` theo
+  `id + version`, tăng `version`) → không khớp thì `EDIT_CONFLICT`. Giao diện dùng hook `useOrderAction`
+- Endpoint công khai: `@Public()` + `@RateLimit({ name, limit, windowSeconds })` + schema `.strict()`; thao tác tạo
+  có thể bị gửi lại thì dùng `idempotencyKey`
+- Phát realtime **sau khi transaction commit**, bọc `try/catch`: lỗi realtime không bao giờ làm hỏng nghiệp vụ
+- Trong transaction PostgreSQL **không bắt lỗi trùng bằng try/catch** (transaction bị hủy); dùng `ON CONFLICT DO NOTHING`
+- `uuidv7()` có sẵn trong PostgreSQL 18, dùng khi phải `INSERT` bằng SQL thô
+- Mã chứng từ: `nextDocumentCode(tx, DOCUMENT_PREFIX.X)` trong `apps/api/src/common/document-code.ts`, gọi TRONG transaction
+- Số điện thoại: lưu `+84...` (`normalizeVnPhone`), hiển thị `0901 234 567` (`formatVnPhone`), cùng trong `shared`
+- Giờ nhập/hiển thị ở admin: `toLocalInput` / `fromLocalInput` / `formatDateTimeVn` (giờ Việt Nam) trong `lib/order-types.ts`
 
 ## Bẫy đã gặp (đừng lặp lại)
 
@@ -227,7 +277,11 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 | Ảnh từ API (:4000) bị chặn `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` | Helmet đặt `Cross-Origin-Resource-Policy: same-origin`. Đã ghi đè thành `cross-origin` CHỈ cho `/media` (`setHeaders` trong `main.ts`). Production dùng Nginx phục vụ ảnh thì thêm `add_header Cross-Origin-Resource-Policy cross-origin;`. Ảnh cache `immutable` 1 năm: sửa header xong phải **Empty Cache and Hard Reload** |
 | Số đếm ở trang quản trị không cập nhật sau khi xóa | Admin cache 30 giây → trang có số đếm dùng `refetchOnMount: 'always'` |
 | "Mọi trạng thái" nhưng ẩn sản phẩm lưu trữ | Đã thay bằng tab trạng thái có số đếm, mặc định Tất cả |
-| Sau migration, TypeScript báo enum/cột mới "không tồn tại" | `prisma generate` rồi **build lại `@ktm/database`** (`pnpm --filter @ktm/database build`) và *Restart TS Server* — API đọc kiểu từ bản build của package |
+| Sau migration, TypeScript báo enum/cột mới "không tồn tại" | API đọc kiểu từ `packages/database/dist`. Chạy `pnpm --filter @ktm/database build` (gồm `prisma generate` + `tsc`) rồi *Restart TS Server*. `tsc --watch` của `pnpm dev` **không** theo dõi `schema.prisma` |
+| Sửa `seed.ts` nhưng seed không đổi | `db:seed` chạy `dist/seed.js` → build `@ktm/database` trước |
+| `curl` trả rỗng, `Unexpected end of JSON input` | API chưa chạy: mở terminal riêng chạy `pnpm dev`. Dùng `curl -sS` để thấy lỗi kết nối |
+| Seed chưa có nhóm khách → tạo đơn lỗi | `customers.group_id` bắt buộc; seed tạo `RETAIL` (mặc định) và `PROJECT` |
+| Trình duyệt không phát chuông | Chặn âm thanh khi chưa tương tác: phải bấm nút 🔔 một lần; lựa chọn lưu ở `localStorage` |
 
 ## Khởi động
 
@@ -245,7 +299,7 @@ Xem thêm `README.md` ở thư mục gốc.
 ## Gom code cho cuộc trò chuyện mới
 
 Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared và các module API liên quan.
-Sửa danh sách `MODULES` theo bước sắp làm (Bước 6: thêm `orders`). Muốn gom kèm SQL migration thì thêm
+Sửa danh sách `MODULES` theo bước sắp làm (Bước 7: `orders|geo|customers|quotes`). Muốn gom kèm SQL migration thì thêm
 vòng `for f in packages/database/prisma/migrations/*/migration.sql; do ...; done` trước `} > "$OUT"`.
 
 ```bash
