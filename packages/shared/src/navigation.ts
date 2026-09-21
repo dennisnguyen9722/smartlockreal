@@ -20,6 +20,9 @@ export interface NavGroup {
 /**
  * Menu của trang quản trị. Mục nào nhân viên không có quyền sẽ tự động bị ẩn.
  * Các trang chưa làm vẫn để sẵn để thấy toàn cảnh hệ thống.
+ *
+ * Không có nhóm Kho và Dịch vụ: công ty không giữ kho, lắp đặt và bảo hành do hãng làm
+ * (quyết định ở Bước 6). Tra cứu bảo hành sẽ thêm ở Bước 8.
  */
 export const ADMIN_NAV: NavGroup[] = [
   {
@@ -33,28 +36,12 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Sản phẩm',
     items: [
-      { label: 'Danh sách sản phẩm', href: '/san-pham', icon: 'Package', permission: 'catalog.view' , ready: true },
-      { label: 'Danh mục', href: '/danh-muc', icon: 'FolderTree', permission: 'catalog.view' , ready: true },
-      { label: 'Hãng', href: '/hang', icon: 'Building2', permission: 'catalog.view' , ready: true },
+      { label: 'Danh sách sản phẩm', href: '/san-pham', icon: 'Package', permission: 'catalog.view', ready: true },
+      { label: 'Danh mục', href: '/danh-muc', icon: 'FolderTree', permission: 'catalog.view', ready: true },
+      { label: 'Hãng', href: '/hang', icon: 'Building2', permission: 'catalog.view', ready: true },
     ],
   },
   {
-    label: 'Kho',
-    items: [
-      { label: 'Tồn kho', href: '/ton-kho', icon: 'Boxes', permission: 'inventory.view' },
-      { label: 'Nhập hàng', href: '/nhap-hang', icon: 'PackagePlus', permission: 'inventory.view' },
-      { label: 'Chuyển kho', href: '/chuyen-kho', icon: 'ArrowLeftRight', permission: 'inventory.view' },
-      { label: 'Kiểm kê', href: '/kiem-ke', icon: 'ClipboardCheck', permission: 'inventory.view' },
-    ],
-  },
-  {
-    label: 'Dịch vụ',
-    items: [
-      { label: 'Lịch lắp đặt', href: '/lap-dat', icon: 'Wrench', permission: 'service.view' },
-      { label: 'Bảo hành', href: '/bao-hanh', icon: 'ShieldCheck', permission: 'warranty.view' },
-    ],
-  },
-    {
     label: 'Nội dung',
     items: [
       { label: 'Thư viện ảnh', href: '/thu-vien-anh', icon: 'Images', permission: 'content.view', ready: true },

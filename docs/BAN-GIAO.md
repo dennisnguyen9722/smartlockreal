@@ -63,24 +63,32 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 
 ## Quyết định nghiệp vụ đã chốt
 
+> **Mô hình kinh doanh (chốt ở Bước 6):** công ty **KHÔNG giữ kho**. Khách đặt trên web hoặc nhắn Zalo →
+> CMS nhận thông báo realtime → nhân viên gọi tư vấn, hỏi hãng còn hàng → đặt hàng với hãng →
+> hãng giao về công ty → nhân viên đi giao cùng **kỹ thuật của hãng** → thu tiền → hoàn tất.
+> Bảo hành do hãng làm: công ty chỉ tra cứu đơn/serial rồi báo hãng.
+
 | Chủ đề | Quyết định |
 |---|---|
-| Kho | **Không có kho tổng**. Hàng ở **3 showroom** (2 TP.HCM, 1 Hà Nội) |
-| MISA | **Bỏ tích hợp**. Website là nơi quản lý kho và doanh thu |
+| Kho | **Không quản lý kho.** Không nhập hàng, chuyển kho, kiểm kê. Các bảng kho trong database để nguyên, không dùng, không làm giao diện |
+| Showroom | Có showroom để khách xem hàng trưng bày, **không theo dõi hàng**. Thông tin showroom (bảng `locations`) dùng cho SEO địa phương và cho đơn nhận tại showroom |
+| MISA | **Bỏ tích hợp**. Website là nơi quản lý đơn hàng và doanh thu |
+| Giá vốn, lợi nhuận | **Không theo dõi** |
 | Khách hàng | **Không đăng nhập**. Đặt hàng bằng số điện thoại. Khách công trình do nhân viên quản lý |
 | Nhân viên | 2 vai trò: `SUPER_ADMIN` (31 quyền), `SALE_STAFF` (21 quyền) |
 | Quyền sửa giá | Nhân viên KD sửa được **giá niêm yết** biến thể (có nhật ký `variant.price_change`). Bảng giá nhóm, flash sale, voucher chỉ quản trị (`pricing.manage`) |
-| Bán tại showroom | Cả hai: mua mang về ngay, và **đặt cọc 10–30%** rồi giao hàng |
-| Thanh toán | Tiền mặt, COD, chuyển khoản VietQR, VNPay |
-| Giao hàng | Nội thành tự giao, tỉnh xa gửi đơn vị vận chuyển |
+| Đặt hàng trên web | Khách chỉ gửi **tên, số điện thoại, địa chỉ gõ tự do**. Địa chỉ chuẩn (tỉnh, phường) do nhân viên điền khi xác nhận |
+| Trạng thái đơn | **Chờ xác nhận → Đã xác nhận → Đã đặt hãng → Hàng về → Đang giao lắp → Hoàn tất**; Hủy được trước Hoàn tất. `PENDING_PAYMENT` không dùng |
+| Thanh toán | **Không thanh toán online** (phải hỏi hãng còn hàng trước). Tiền mặt, chuyển khoản, COD do nhân viên ghi nhận. Có thể thu cọc. Bỏ VNPay |
+| Giao hàng | Nhân viên đi giao cùng kỹ thuật hãng. Không dùng bảng `shipments` |
+| SKU và serial | Dòng đơn luôn lưu SKU. Serial máy ghi lúc giao (không bắt buộc) để báo hãng khi bảo hành |
 | VAT | **Giá chưa gồm VAT**, cộng khi khách lấy hóa đơn (công ty chọn, dù Điều 29 Luật Giá 2023 yêu cầu niêm yết đã gồm thuế — đã báo rủi ro) |
 | Giá | Lấy **giá thấp nhất** giữa các lớp, không cộng dồn. Làm tròn **xuống** hàng nghìn |
 | Giá gạch ngang | `compareAtPrice` = giá cũ gạch đi cho khách thấy đang giảm. **Không phải giá KM**; KM có thời hạn làm bằng Flash sale |
 | Khuyến mãi | Flash sale, voucher, quà tặng kèm |
 | Báo giá công trình | Một báo giá → một đơn. Sửa sau khi gửi = tạo phiên bản mới. **Không mua nợ** |
-| Bảo hành | Tính từ **ngày lắp đặt**; không lắp thì từ ngày giao. Không tự kích hoạt nếu chưa lắp |
-| Đổi trả | **Chỉ đổi máy mới** nếu lỗi nhà sản xuất trong **7 ngày**. Máy mới giữ thời hạn còn lại |
-| Kỹ thuật viên | Có đội riêng (HCM, HN), **chưa cần tài khoản** đăng nhập |
+| Bảo hành, đổi trả | **Do hãng xử lý.** Công ty chỉ cần **tra cứu** theo số điện thoại hoặc serial (máy nào, ngày giao) để báo hãng |
+| Lắp đặt | Do **kỹ thuật của hãng**. Không có lịch kỹ thuật viên; đơn chỉ lưu ngày hẹn và ghi chú kỹ thuật hãng |
 | Ảnh | Lưu **trên server** (`MEDIA_ROOT`), đường dẫn `<năm>/<tháng>/<hash>.webp` |
 | Đánh giá | Chỉ khách đã mua, qua link có mã, nhân viên duyệt trước |
 
@@ -99,6 +107,7 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | Hai người cùng sửa | Client gửi `expectedUpdatedAt`; lệch thì API trả **409 `EDIT_CONFLICT`** |
 | Ảnh sản phẩm | Ảnh đầu tiên là ảnh đại diện. Ảnh gắn biến thể hiện khi khách chọn biến thể. Tối đa 20 ảnh/sản phẩm |
 | Xóa sản phẩm | Chỉ xóa hẳn khi **chưa từng có giao dịch**, không đang bán, không nằm trong voucher (`voucher_targets` là Cascade — xóa sẽ làm voucher mất điều kiện). Còn lại **lưu trữ**. Xóa nhiều: mỗi sản phẩm một transaction, trả về danh sách bỏ qua kèm lý do |
+| Danh sách sản phẩm | Tab trạng thái có số đếm, mặc định **Tất cả** (gồm lưu trữ, dòng làm mờ). Số sản phẩm ở trang Hãng/Danh mục **tính cả lưu trữ** |
 
 ## Đã hoàn thành
 
@@ -138,15 +147,22 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 | POST / PATCH / DELETE | `/:id/options/:optionId/values` , `/options/values/:valueId` | Giá trị thuộc tính |
 | POST / PATCH / DELETE | `/:id/media` , `/:id/media/order` , `/media/:mediaId` | Ảnh sản phẩm |
 
-## Việc tiếp theo
+## Việc tiếp theo (lộ trình mới từ Bước 6)
 
-**Bước 6: CMS tồn kho** — tồn theo 3 showroom, phiếu nhập, chuyển kho, kiểm kê, serial từng chiếc,
-sổ kho. Thẻ biến thể sẽ hiện tồn kho theo showroom (chỉ xem).
-
-Sau đó: 7 đơn hàng → 8 báo giá → 9 lắp đặt/bảo hành → 10 nội dung/cấu hình →
-11 thông báo realtime → **12 storefront + thiết kế giao diện**.
+| Bước | Nội dung |
+|---|---|
+| **6. Đơn hàng** (đang làm) | Migration `orders_brand_sourcing` ✅ → danh sách đơn có tab trạng thái → chi tiết đơn (đổi trạng thái theo quy trình, ghi thanh toán/cọc, hẹn giao lắp, serial) → tạo đơn từ Zalo/tại showroom → **thông báo realtime khi có đơn web** |
+| **7. Khách hàng + Báo giá công trình** | Khách tự tạo theo số điện thoại khi đặt; báo giá có phiên bản, chuyển thành đơn |
+| **8. Nội dung + Cấu hình** | Showroom (SEO), bài viết, banner, đánh giá, thông tin công ty, **tra cứu bảo hành** |
+| **9. Storefront + thiết kế giao diện** | Website bán hàng, form đặt hàng ngắn gọn |
 
 Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
+
+**Migration `orders_brand_sourcing`** (Bước 6): thêm trạng thái `ORDERED_FROM_BRAND`, `GOODS_ARRIVED`;
+cột `ship_address_raw`, `brand_order_ref`, `brand_ordered_at`, `goods_arrived_at`, `scheduled_at`,
+`brand_technician_note`, `assigned_staff_id` ở `orders`; `serial_numbers` ở `order_lines`.
+CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận. Quy tắc thời gian của 2 trạng thái mới do API kiểm tra
+(PostgreSQL không cho dùng giá trị enum mới trong cùng migration).
 
 ### Việc tồn (làm khi có thời gian hoặc khi cần)
 
@@ -158,6 +174,8 @@ Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
 - Migration thêm `product_media.media_asset_id` (FK Restrict) thay cho việc đối chiếu theo `url`
 - `lib/hooks.ts` `useApiQuery`: `...options` đang ghi đè điều kiện "đã đăng nhập" của `enabled`
 - Cảnh báo rời trang khi còn thay đổi chưa lưu chỉ chạy lúc đóng tab/tải lại, chưa chặn khi bấm menu
+- Trang Hãng/Danh mục hiển thị tách "N sản phẩm · M lưu trữ"
+- Có thể viết thêm migration CHECK thời gian cho `ORDERED_FROM_BRAND`/`GOODS_ARRIVED` (sau khi enum đã có)
 
 ## Quy ước code
 
@@ -181,6 +199,11 @@ Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
 - Form admin: chỉ gửi trường đã đổi (`buildUpdatePayload`), "có thay đổi chưa lưu" tính từ chính hàm đó
 - Tiền trên giao diện: dùng `PriceInput` (hiển thị `4.990.000`, giá trị là chuỗi chữ số)
 - Gửi file lên API: `authFetch(path, { method: 'POST', body: formData })` — `api.ts` tự bỏ header JSON
+- API danh sách sản phẩm: **không truyền `status` thì ẩn sản phẩm lưu trữ** (dành cho ô chọn sản phẩm khi tạo
+  đơn, báo giá). Trang danh sách quản trị truyền `status=ALL`
+- Trang quản trị có số đếm (Hãng, Danh mục...) dùng `refetchOnMount: 'always'` vì admin cache `staleTime` 30 giây
+- Thêm giá trị enum trong PostgreSQL: **không dùng giá trị mới trong cùng migration**
+- Migration: sửa `schema.prisma` → `prisma migrate dev --create-only` → nối phần SQL viết tay (CHECK, trigger) → `prisma migrate dev`
 
 ## Bẫy đã gặp (đừng lặp lại)
 
@@ -202,6 +225,8 @@ Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
 | `useSearchParams` trong trang client | Bọc component trong `<Suspense>`, nếu không Next.js lỗi khi build |
 | Gom code bằng từ khóa tiếng Anh | Bỏ sót thư mục tên tiếng Việt (`san-pham`, `thu-vien-anh`) → dùng lệnh ở cuối file |
 | Ảnh từ API (:4000) bị chặn `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` | Helmet đặt `Cross-Origin-Resource-Policy: same-origin`. Đã ghi đè thành `cross-origin` CHỈ cho `/media` (`setHeaders` trong `main.ts`). Production dùng Nginx phục vụ ảnh thì thêm `add_header Cross-Origin-Resource-Policy cross-origin;`. Ảnh cache `immutable` 1 năm: sửa header xong phải **Empty Cache and Hard Reload** |
+| Số đếm ở trang quản trị không cập nhật sau khi xóa | Admin cache 30 giây → trang có số đếm dùng `refetchOnMount: 'always'` |
+| "Mọi trạng thái" nhưng ẩn sản phẩm lưu trữ | Đã thay bằng tab trạng thái có số đếm, mặc định Tất cả |
 
 ## Khởi động
 
@@ -219,7 +244,8 @@ Xem thêm `README.md` ở thư mục gốc.
 ## Gom code cho cuộc trò chuyện mới
 
 Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared và các module API liên quan.
-Sửa danh sách `MODULES` theo bước sắp làm (Bước 6: thêm `inventory` hoặc tên thư mục module kho).
+Sửa danh sách `MODULES` theo bước sắp làm (Bước 6: thêm `orders`). Muốn gom kèm SQL migration thì thêm
+vòng `for f in packages/database/prisma/migrations/*/migration.sql; do ...; done` trước `} > "$OUT"`.
 
 ```bash
 cd ~/Projects/huyhoang/khoathongminh

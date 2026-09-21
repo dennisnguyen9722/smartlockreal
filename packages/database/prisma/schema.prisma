@@ -897,6 +897,7 @@ model Staff {
   giftPromotions GiftPromotion[] @relation("GiftPromotionCreatedBy")
 
   createdOrders           Order[]              @relation("OrderCreatedBy")
+  assignedOrders          Order[]              @relation("OrderAssignedStaff")
   orderStatusChanges      OrderStatusHistory[]
   receivedPayments        Payment[]            @relation("PaymentReceivedBy")
   matchedBankTransactions BankTransaction[]    @relation("BankTransactionMatchedBy")
@@ -1235,10 +1236,17 @@ enum SalesChannel {
   @@map("sales_channel")
 }
 
+/// Quy trình (Bước 6): Chờ xác nhận → Đã xác nhận → Đã đặt hãng → Hàng về → Đang giao lắp → Hoàn tất.
+/// PENDING_PAYMENT không dùng: công ty không nhận thanh toán online.
 enum OrderStatus {
   PENDING_PAYMENT
   PENDING_CONFIRMATION
   CONFIRMED
+  /// Đã đặt hàng với hãng, chờ hãng giao về công ty
+  ORDERED_FROM_BRAND
+  /// Hãng đã giao hàng về công ty, chờ hẹn giao lắp cho khách
+  GOODS_ARRIVED
+  /// Đang giao và lắp đặt cùng kỹ thuật của hãng
   FULFILLING
   COMPLETED
   CANCELLED
@@ -1362,6 +1370,20 @@ model Order {
   shipStreet         String? @map("ship_street")
   /// Khu vực lắp đặt/tự giao; null nếu ngoài TP.HCM và Hà Nội
   shipRegion         Region? @map("ship_region")
+  /// Địa chỉ khách gõ tự do trên web; nhân viên chuẩn hóa thành tỉnh/phường khi xác nhận đơn
+  shipAddressRaw     String? @map("ship_address_raw")
+
+  // Làm việc với hãng (công ty không giữ kho: nhận đơn rồi mới đặt hãng)
+  /// Mã đơn hoặc số phiếu bên hãng, nếu hãng có cấp
+  brandOrderRef       String?   @map("brand_order_ref") @db.VarChar(100)
+  brandOrderedAt      DateTime? @map("brand_ordered_at") @db.Timestamptz(3)
+  goodsArrivedAt      DateTime? @map("goods_arrived_at") @db.Timestamptz(3)
+  /// Ngày giờ hẹn giao lắp với khách
+  scheduledAt         DateTime? @map("scheduled_at") @db.Timestamptz(3)
+  /// Kỹ thuật viên của hãng đi lắp: tên, số điện thoại, ghi chú
+  brandTechnicianNote String?   @map("brand_technician_note")
+  /// Nhân viên phụ trách: tư vấn, đặt hãng, đi giao cùng kỹ thuật hãng
+  assignedStaffId     String?   @map("assigned_staff_id") @db.Uuid
 
   // Thuế và hóa đơn
   vatMode             VatMode @default(EXCLUSIVE_ON_REQUEST) @map("vat_mode")
@@ -1406,6 +1428,7 @@ model Order {
   customer            Customer?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
   fulfillmentLocation Location?            @relation(fields: [fulfillmentLocationId], references: [id], onDelete: Restrict)
   createdBy           Staff?               @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedStaff       Staff?               @relation("OrderAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
   lines               OrderLine[]
   payments            Payment[]
   statusHistory       OrderStatusHistory[]
@@ -1427,6 +1450,7 @@ model Order {
   @@index([status, placedAt])
   @@index([customerPhone])
   @@index([channel, placedAt])
+  @@index([assignedStaffId, status])
   @@map("orders")
 }
 
@@ -1460,6 +1484,8 @@ model OrderLine {
   installationRegion  Region?       @map("installation_region")
   /// Số lượng đã giao (cập nhật khi giao hàng)
   quantityShipped     Int           @default(0) @map("quantity_shipped")
+  /// Serial các máy đã giao (không bắt buộc): để báo hãng khi khách cần bảo hành
+  serialNumbers       String[]      @default([]) @map("serial_numbers")
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
   order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
