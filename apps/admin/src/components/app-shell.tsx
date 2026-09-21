@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Menu bên trái */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto border-r bg-card transition-transform md:static md:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto border-r bg-card transition-transform md:static md:translate-x-0 print:hidden',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -114,7 +114,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur">
+        {/* print:hidden: trang in (vd báo giá) chỉ in nội dung, không in menu và thanh trên */}
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur print:hidden">
           <Button
             variant="ghost"
             className="md:hidden"
@@ -142,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 md:p-6 print:p-0">{children}</main>
       </div>
     </div>
   );

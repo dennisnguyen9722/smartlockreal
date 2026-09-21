@@ -9,4 +9,6 @@ export * from './schemas/spec';
 export * from './schemas/product';
 export * from './schemas/import';
 export * from './schemas/order';
+export * from './schemas/customer';
+export * from './schemas/quote';
 export * from './navigation';

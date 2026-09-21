@@ -29,8 +29,8 @@ export const ADMIN_NAV: NavGroup[] = [
     label: 'Bán hàng',
     items: [
       { label: 'Đơn hàng', href: '/don-hang', icon: 'ShoppingCart', permission: 'order.view', ready: true },
-      { label: 'Báo giá công trình', href: '/bao-gia', icon: 'FileText', permission: 'quote.view' },
-      { label: 'Khách hàng', href: '/khach-hang', icon: 'Users', permission: 'customer.view' },
+      { label: 'Báo giá công trình', href: '/bao-gia', icon: 'FileText', permission: 'quote.view', ready: true },
+      { label: 'Khách hàng', href: '/khach-hang', icon: 'Users', permission: 'customer.view', ready: true },
     ],
   },
   {

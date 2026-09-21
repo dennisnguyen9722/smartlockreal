@@ -3,6 +3,8 @@ import { z } from 'zod';
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   REDIS_URL: z.string().regex(/^rediss?:\/\//, 'phải bắt đầu bằng redis://'),
+  /** Việc định kỳ (hết hạn báo giá...) cần đọc/ghi database */
+  DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, 'phải bắt đầu bằng postgresql://'),
   WORKER_CONCURRENCY: z.coerce
     .number({ error: 'phải là số' })
     .int('phải là số nguyên')

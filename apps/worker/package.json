@@ -9,6 +9,7 @@
     "start": "node --env-file=../../.env dist/main.js"
   },
   "dependencies": {
+    "@ktm/database": "workspace:*",
     "@ktm/shared": "workspace:*",
     "@socket.io/redis-emitter": "^5.1.0",
     "bullmq": "^6.3.6",

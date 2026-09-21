@@ -43,6 +43,19 @@ export function toLineInputs(lines: LineDraft[]): OrderLineInput[] {
     });
 }
 
+const PERCENT = new Intl.NumberFormat('vi-VN', { style: 'percent', maximumFractionDigits: 1 });
+function formatPercent(ratio: number): string {
+    return PERCENT.format(ratio);
+}
+
+/** % giảm lớn nhất so với giá hệ thống (0..1), để cảnh báo báo giá cần duyệt */
+export function maxDiscountRatio(lines: LineDraft[]): number {
+    return lines.reduce((max, line) => {
+        if (line.listPrice <= 0) return max;
+        return Math.max(max, (line.listPrice - Number(line.unitPrice || 0)) / line.listPrice);
+    }, 0);
+}
+
 export function linesSubtotal(lines: LineDraft[]): number {
     return lines.reduce((sum, line) => sum + Number(line.unitPrice || 0) * line.quantity, 0);
 }
@@ -62,11 +75,16 @@ export function OrderLineEditor({
     onChange,
     disabled,
     error,
+    showDiscount,
+    priceLabel = 'Niêm yết',
 }: {
     lines: LineDraft[];
     onChange: (lines: LineDraft[]) => void;
     disabled?: boolean;
     error?: string;
+    /** Báo giá: hiện % giảm so với giá hệ thống ở từng dòng */
+    showDiscount?: boolean;
+    priceLabel?: string;
 }) {
     function add(product: ProductOption, variant: ProductOption['variants'][number]) {
         const existing = lines.find((line) => line.variantId === variant.id);
@@ -168,8 +186,15 @@ export function OrderLineEditor({
                                             onClick={() => update(line.key, { unitPrice: String(line.listPrice) })}
                                             disabled={disabled}
                                         >
-                                            Niêm yết {formatVnd(line.listPrice)}
+                                            {priceLabel} {formatVnd(line.listPrice)}
                                         </button>
+                                    )}
+                                    {showDiscount && changed && line.listPrice > 0 && (
+                                        <p className={cn('text-xs font-medium', price < line.listPrice ? 'text-green-600' : 'text-amber-600')}>
+                                            {price < line.listPrice
+                                                ? `Giảm ${formatPercent((line.listPrice - price) / line.listPrice)}`
+                                                : `Cao hơn ${formatPercent((price - line.listPrice) / line.listPrice)}`}
+                                        </p>
                                     )}
                                 </div>
 

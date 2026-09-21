@@ -19,6 +19,8 @@ import { CatalogModule } from './catalog/catalog.module';
 import { MediaModule } from './media/media.module';
 import { OrdersModule } from './orders/orders.module';
 import { GeoModule } from './geo/geo.module';
+import { CustomersModule } from './customers/customers.module';
+import { QuotesModule } from './quotes/quotes.module';
 
 @Module({})
 export class AppModule {
@@ -37,6 +39,8 @@ export class AppModule {
         MediaModule,
         GeoModule,
         OrdersModule,
+        CustomersModule,
+        QuotesModule,
       ],
       controllers: [
         HealthController,

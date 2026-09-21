@@ -282,6 +282,7 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 | `curl` trả rỗng, `Unexpected end of JSON input` | API chưa chạy: mở terminal riêng chạy `pnpm dev`. Dùng `curl -sS` để thấy lỗi kết nối |
 | Seed chưa có nhóm khách → tạo đơn lỗi | `customers.group_id` bắt buộc; seed tạo `RETAIL` (mặc định) và `PROJECT` |
 | Trình duyệt không phát chuông | Chặn âm thanh khi chưa tương tác: phải bấm nút 🔔 một lần; lựa chọn lưu ở `localStorage` |
+| `pnpm dev` lỗi `ENOTEMPTY ... generated/prisma` | `database:build` và `database:dev` cùng chạy `prisma generate`. Đã thêm `packages/database/turbo.json` (dev phụ thuộc build) và bỏ `prisma generate` khỏi script `dev` |
 
 ## Khởi động
 

@@ -41,8 +41,16 @@ export const QUEUE_PREFIX = 'ktm';
 
 /** Tên hàng đợi. KHÔNG dùng dấu ":" vì BullMQ dùng nó làm ký tự phân cách. */
 export const QueueName = {
-  SYSTEM: 'system', // Job hệ thống, dùng để thử nghiệm và bảo trì
+  SYSTEM: 'system', // Job hệ thống, dùng để thử nghiệm
+  MAINTENANCE: 'maintenance', // Việc định kỳ: hết hạn báo giá...
 } as const;
+
+/** Tên job trong hàng đợi maintenance */
+export const MaintenanceJob = {
+  /** Mỗi ngày 00:05 giờ Việt Nam: báo giá đã gửi mà quá hạn -> Hết hạn */
+  EXPIRE_QUOTES: 'expire-quotes',
+} as const;
+export type MaintenanceJob = (typeof MaintenanceJob)[keyof typeof MaintenanceJob];
 export type QueueName = (typeof QueueName)[keyof typeof QueueName];
 
 export const REALTIME_NAMESPACE = '/realtime';

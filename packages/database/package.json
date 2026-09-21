@@ -15,7 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "node --env-file=../../.env dist/seed.js",
-    "dev": "prisma generate --no-hints && tsc -p tsconfig.json --watch --preserveWatchOutput"
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
   },
   "devDependencies": {
     "@types/node": "^24.13.5",
