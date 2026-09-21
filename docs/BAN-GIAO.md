@@ -227,6 +227,7 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 | Ảnh từ API (:4000) bị chặn `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` | Helmet đặt `Cross-Origin-Resource-Policy: same-origin`. Đã ghi đè thành `cross-origin` CHỈ cho `/media` (`setHeaders` trong `main.ts`). Production dùng Nginx phục vụ ảnh thì thêm `add_header Cross-Origin-Resource-Policy cross-origin;`. Ảnh cache `immutable` 1 năm: sửa header xong phải **Empty Cache and Hard Reload** |
 | Số đếm ở trang quản trị không cập nhật sau khi xóa | Admin cache 30 giây → trang có số đếm dùng `refetchOnMount: 'always'` |
 | "Mọi trạng thái" nhưng ẩn sản phẩm lưu trữ | Đã thay bằng tab trạng thái có số đếm, mặc định Tất cả |
+| Sau migration, TypeScript báo enum/cột mới "không tồn tại" | `prisma generate` rồi **build lại `@ktm/database`** (`pnpm --filter @ktm/database build`) và *Restart TS Server* — API đọc kiểu từ bản build của package |
 
 ## Khởi động
 
