@@ -86,7 +86,11 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | Giá | Lấy **giá thấp nhất** giữa các lớp, không cộng dồn. Làm tròn **xuống** hàng nghìn |
 | Giá gạch ngang | `compareAtPrice` = giá cũ gạch đi cho khách thấy đang giảm. **Không phải giá KM**; KM có thời hạn làm bằng Flash sale |
 | Khuyến mãi | Flash sale, voucher, quà tặng kèm |
-| Báo giá công trình | Một báo giá → một đơn. Sửa sau khi gửi = tạo phiên bản mới. **Không mua nợ** |
+| Báo giá công trình | Một báo giá → một đơn (kênh `PROJECT`, **giữ nguyên giá đã báo**, `price_source = QUOTE`). Sửa sau khi gửi = tạo phiên bản mới. **Không mua nợ** |
+| Duyệt báo giá | Giảm **quá** `quote.approval_threshold_bps` (mặc định 1000 = 10%) so với giá niêm yết thì cần `quote.approve` (quản trị) duyệt trước khi gửi. Trả lại phải ghi lý do. Đã duyệt mà sửa → về Nháp, **mất duyệt** |
+| Gửi báo giá | Trang in A4 `/bao-gia/[id]/in` → trình duyệt "Lưu thành PDF" → gửi Zalo/Email → bấm "Đã gửi khách". `pdf_url` lưu đường dẫn trang in. Trang in luôn dùng thông tin công ty **mới nhất** |
+| Hết hạn báo giá | Worker, hàng đợi `maintenance`, **00:05 giờ VN** mỗi ngày: báo giá *Đã gửi* quá `valid_until` → *Hết hạn* (khách đã đồng ý thì giữ) |
+| Khách hàng | Cá nhân: SĐT bắt buộc, duy nhất. Doanh nghiệp: bắt buộc tên công ty, MST duy nhất. Luôn có đúng một người liên hệ chính. **Không xóa khách** |
 | Bảo hành, đổi trả | **Do hãng xử lý.** Công ty chỉ cần **tra cứu** theo số điện thoại hoặc serial (máy nào, ngày giao) để báo hãng |
 | Lắp đặt | Do **kỹ thuật của hãng**. Không có lịch kỹ thuật viên; đơn chỉ lưu ngày hẹn và ghi chú kỹ thuật hãng |
 | Không bán nợ | Chỉ **Hoàn tất** được khi đã thu đủ tiền. Hủy đơn đã thu tiền phải **ghi hoàn tiền trước** |
@@ -153,6 +157,29 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 - **Tạo đơn** `/don-hang/moi`: nhận ra khách cũ theo SĐT (gợi ý tên, địa chỉ lần trước), tìm sản phẩm theo tên/SKU, sửa giá
 - Chống ghi đè bằng cột `orders.version` (`expectedVersion` → `EDIT_CONFLICT`)
 
+**Bước 7: Khách hàng + Báo giá công trình** ✅
+- **Khách hàng** `/khach-hang`: tab Doanh nghiệp/Cá nhân, tìm theo tên/SĐT/công ty/MST, tổng đã mua (đơn Hoàn tất);
+  chi tiết có người liên hệ (một người chính), lịch sử 20 đơn gần nhất; báo trùng SĐT/MST kèm nút mở khách đã có
+- **Báo giá** `/bao-gia`: lập báo giá (chọn khách, người nhận, công trình, giá báo từng dòng, % giảm tự tính,
+  "tiết kiệm so với giá lẻ"), duyệt, gửi, khách đồng ý/từ chối, phiên bản mới, **chuyển thành đơn**
+- **Trang in** A4 có "Bằng chữ" (`lib/vn-number-words.ts`), điều khoản, thông tin chuyển khoản, chỗ ký
+- **Worker** đã kết nối database (`@ktm/database`, `DATABASE_URL`); hàng đợi `maintenance` với `upsertJobScheduler`
+- Thông tin công ty: các khóa `company.*` trong `system_settings` (migration chỉ chèn dữ liệu)
+
+### API khách hàng, báo giá (`/api/v1`)
+
+| Phương thức | Đường dẫn | Việc |
+|---|---|---|
+| GET / POST | `/customers`, `/customers/groups` | Danh sách (kèm tổng đã mua), nhóm khách; thêm khách |
+| GET / PATCH | `/customers/:id` | Chi tiết (kèm `stats`, 20 đơn gần nhất); sửa |
+| POST / PATCH / DELETE | `/customers/:id/contacts`, `/customers/contacts/:contactId` | Người liên hệ |
+| GET / POST | `/quotes` | Danh sách (kèm `statusCounts`, ẩn bản đã thay); lập báo giá |
+| GET / PATCH | `/quotes/:id` | Chi tiết (kèm `revisions`, `savings`, `approvalThresholdBps`); sửa khi Nháp |
+| GET | `/quotes/:id/print` | Dữ liệu trang in + `CompanyInfo` |
+| PUT | `/quotes/:id/lines` | Thay dòng (chỉ Nháp; trigger database cũng chặn) |
+| POST | `/quotes/:id/actions` | `SUBMIT`, `WITHDRAW`, `APPROVE`, `RETURN`, `REOPEN`, `CANCEL`, `MARK_SENT`, `ACCEPT`, `REJECT` |
+| POST | `/quotes/:id/revise`, `/quotes/:id/convert` | Phiên bản mới (trả về bản mới); tạo đơn (trả `orderId`, `orderCode`) |
+
 ### API đơn hàng (`/api/v1`)
 
 | Phương thức | Đường dẫn | Việc |
@@ -186,8 +213,8 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 | Bước | Nội dung |
 |---|---|
 | 6. Đơn hàng | ✅ Xong |
-| **7. Khách hàng + Báo giá công trình** (tiếp theo) | Danh sách, chi tiết khách (lịch sử đơn, địa chỉ, khách doanh nghiệp có MST); báo giá công trình có phiên bản, duyệt chiết khấu, chuyển thành đơn (dùng lại `OrderService.createInTx`) |
-| **8. Nội dung + Cấu hình** | Showroom (SEO), bài viết, banner, đánh giá, thông tin công ty, **tra cứu bảo hành** |
+| 7. Khách hàng + Báo giá công trình | ✅ Xong |
+| **8. Nội dung + Cấu hình** (tiếp theo) | Trang **Cấu hình**: thông tin công ty (sửa các khóa `company.*`, logo), SEO chung (tiêu đề/mô tả mặc định, ảnh chia sẻ, xác minh Google), quy tắc bán hàng (ngưỡng duyệt, hiệu lực báo giá, VAT), ẩn cấu hình di sản. **Showroom** (địa chỉ, giờ mở cửa, bản đồ, `LocalBusiness`). Bài viết, banner, đánh giá. **Tra cứu bảo hành** theo SĐT/serial |
 | **9. Storefront + thiết kế giao diện** | Website bán hàng, form đặt hàng ngắn gọn |
 
 Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
@@ -215,6 +242,11 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Đổi hình thức nhận hàng (giao tận nơi ↔ nhận tại showroom) sau khi đã tạo đơn
 - Cân nhắc cho nhân viên KD quyền `order.cancel`
 - In phiếu giao hàng / phiếu xác nhận đơn cho khách
+- Cấu hình di sản không còn dùng: `checkout.hold_minutes`, `payment.vnpay_session_minutes`, `inventory.transfer_stale_days`,
+  `vendor_return.stale_days`, `warranty.exchange_window_days` → ẩn ở trang Cấu hình (Bước 8)
+- Trang chi tiết đơn: hiện liên kết về báo giá gốc (đơn kênh Công trình có `quote_id`)
+- Tạo PDF phía máy chủ (hiện dùng "Lưu thành PDF" của trình duyệt)
+- Nhóm khách có `discount_bps` nhưng chưa áp giá theo nhóm (các lớp giá sẽ làm cùng Flash sale/voucher)
 
 ## Quy ước code
 
@@ -282,6 +314,9 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 | `curl` trả rỗng, `Unexpected end of JSON input` | API chưa chạy: mở terminal riêng chạy `pnpm dev`. Dùng `curl -sS` để thấy lỗi kết nối |
 | Seed chưa có nhóm khách → tạo đơn lỗi | `customers.group_id` bắt buộc; seed tạo `RETAIL` (mặc định) và `PROJECT` |
 | Trình duyệt không phát chuông | Chặn âm thanh khi chưa tương tác: phải bấm nút 🔔 một lần; lựa chọn lưu ở `localStorage` |
+| Dòng báo giá không sửa được | Trigger `quote_lines_draft_only`: chỉ khi báo giá **Nháp**. Đã gửi → tạo phiên bản mới |
+| Tạo phiên bản mới báo giá lỗi trùng | Unique `quotes_one_current_revision`: chuyển bản cũ sang `SUPERSEDED` **trước**, rồi mới thêm bản mới (cùng transaction) |
+| Worker thêm dependency workspace | `pnpm install` rồi `pnpm --filter @ktm/database build` trước khi chạy worker |
 | `pnpm dev` lỗi `ENOTEMPTY ... generated/prisma` | `database:build` và `database:dev` cùng chạy `prisma generate`. Đã thêm `packages/database/turbo.json` (dev phụ thuộc build) và bỏ `prisma generate` khỏi script `dev` |
 
 ## Khởi động
@@ -300,7 +335,7 @@ Xem thêm `README.md` ở thư mục gốc.
 ## Gom code cho cuộc trò chuyện mới
 
 Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared và các module API liên quan.
-Sửa danh sách `MODULES` theo bước sắp làm (Bước 7: `orders|geo|customers|quotes`). Muốn gom kèm SQL migration thì thêm
+Sửa danh sách `MODULES` theo bước sắp làm (Bước 8: `catalog|media|orders|quotes|customers|common|auth|audit`). Muốn gom kèm SQL migration thì thêm
 vòng `for f in packages/database/prisma/migrations/*/migration.sql; do ...; done` trước `} > "$OUT"`.
 
 ```bash
