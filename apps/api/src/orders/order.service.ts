@@ -164,9 +164,9 @@ export class OrderService {
     if (params.fulfillmentType === 'STORE_PICKUP' && params.fulfillmentLocationId) {
       const location = await tx.location.findUnique({
         where: { id: params.fulfillmentLocationId },
-        select: { isActive: true },
+        select: { isActive: true, type: true },
       });
-      if (!location?.isActive) errors.push({ field: 'fulfillmentLocationId', message: 'Showroom không tồn tại hoặc đã tắt' });
+      if (!location?.isActive || location.type !== 'STORE') errors.push({ field: 'fulfillmentLocationId', message: 'Showroom không tồn tại hoặc đã tắt' });
     }
     if (params.assignedStaffId) {
       const staff = await tx.staff.findUnique({ where: { id: params.assignedStaffId }, select: { status: true } });
@@ -190,10 +190,17 @@ export class OrderService {
       CUSTOMER_SOURCE_BY_CHANNEL[params.channel],
     );
     if (params.privacyConsent) {
+      // Phiên bản khách đồng ý = bản chính sách bảo vệ dữ liệu cá nhân website đang hiện (trang Chính sách).
+      // Chưa tạo bản nào trong CMS thì dùng hằng số cũ để không làm hỏng đặt hàng.
+      const policy = await tx.policyVersion.findFirst({
+        where: { code: 'PRIVACY', effectiveAt: { lte: new Date() } },
+        orderBy: { effectiveAt: 'desc' },
+        select: { version: true },
+      });
       // Chỉ ghi lần đồng ý đầu tiên; database yêu cầu thời điểm và phiên bản đi cùng nhau
       await tx.customer.updateMany({
         where: { id: customerId, privacyConsentAt: null },
-        data: { privacyConsentAt: new Date(), privacyPolicyVersion: PRIVACY_POLICY_VERSION },
+        data: { privacyConsentAt: new Date(), privacyPolicyVersion: policy?.version ?? PRIVACY_POLICY_VERSION },
       });
     }
     const code = await nextDocumentCode(tx, DOCUMENT_PREFIX.ORDER);
@@ -386,10 +393,10 @@ export class OrderService {
     };
   }
 
-  /** Showroom khách có thể đến nhận hàng */
+  /** Showroom khách có thể đến nhận hàng. Chỉ STORE: kho (WAREHOUSE) là di sản, khách không đến được */
   pickupLocations() {
     return this.db.location.findMany({
-      where: { isActive: true },
+      where: { isActive: true, type: 'STORE' },
       orderBy: [{ region: 'asc' }, { code: 'asc' }],
       select: { id: true, name: true, address: true, region: true },
     });

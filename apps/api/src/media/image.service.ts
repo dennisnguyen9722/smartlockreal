@@ -2,7 +2,7 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import type { PrismaClient } from '@ktm/database';
-import { ErrorCode } from '@ktm/shared';
+import { ErrorCode, SETTING_DEFINITIONS } from '@ktm/shared';
 import { AppException } from '../common/errors/app.exception';
 import { PRISMA } from '../database/database.module';
 import { StorageService } from './storage.service';
@@ -15,6 +15,11 @@ const SIZES = [
 ] as const;
 
 const MAX_DIMENSION = 6000;
+
+/** Các khóa cấu hình lưu đường dẫn ảnh (logo, ảnh chia sẻ...) */
+const IMAGE_SETTING_KEYS = SETTING_DEFINITIONS.filter((definition) => definition.input === 'image').map(
+  (definition) => definition.key,
+);
 
 @Injectable()
 export class ImageService {
@@ -133,10 +138,23 @@ export class ImageService {
     });
     if (!asset) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
 
-    // Ảnh sản phẩm lưu theo url (không có khóa ngoại tới media_assets), nên phải đếm riêng
-    const productUsage = await this.db.productMedia.count({ where: { url: asset.url } });
+    // Ảnh sản phẩm, ảnh showroom và ảnh ở trang Cấu hình lưu theo url (không có khóa ngoại tới media_assets),
+    // nên phải đếm riêng
+    const [productUsage, settingUsage, showroomUsage, postContentUsage] = await Promise.all([
+      this.db.productMedia.count({ where: { url: asset.url } }),
+      this.db.systemSetting.count({ where: { key: { in: IMAGE_SETTING_KEYS }, value: { equals: asset.url } } }),
+      this.db.location.count({ where: { imageUrls: { has: asset.url } } }),
+      // Ảnh chèn trong nội dung bài viết (ảnh bìa đã có khóa ngoại, đếm ở postCovers)
+      this.db.post.count({ where: { contentHtml: { contains: asset.url } } }),
+    ]);
     const used =
-      asset._count.postCovers + asset._count.bannerDesktop + asset._count.bannerMobile + productUsage;
+      asset._count.postCovers +
+      asset._count.bannerDesktop +
+      asset._count.bannerMobile +
+      productUsage +
+      settingUsage +
+      showroomUsage +
+      postContentUsage;
     if (used > 0) {
       throw new AppException(ErrorCode.IN_USE, HttpStatus.CONFLICT, {
         references: used,
@@ -144,7 +162,13 @@ export class ImageService {
         hint:
           productUsage > 0
             ? `Ảnh đang dùng cho ${productUsage} sản phẩm/biến thể. Gỡ khỏi sản phẩm trước khi xóa.`
-            : 'Ảnh đang dùng cho bài viết hoặc banner.',
+            : settingUsage > 0
+              ? 'Ảnh đang dùng làm logo hoặc ảnh chia sẻ ở trang Cấu hình. Đổi ảnh khác ở đó trước khi xóa.'
+              : showroomUsage > 0
+                ? `Ảnh đang dùng cho ${showroomUsage} showroom. Gỡ khỏi showroom trước khi xóa.`
+                : postContentUsage > 0 || asset._count.postCovers > 0
+                  ? 'Ảnh đang dùng trong bài viết (ảnh bìa hoặc chèn trong bài). Gỡ khỏi bài trước khi xóa.'
+                  : 'Ảnh đang dùng cho banner.',
       });
     }
 

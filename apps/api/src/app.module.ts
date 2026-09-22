@@ -21,6 +21,13 @@ import { OrdersModule } from './orders/orders.module';
 import { GeoModule } from './geo/geo.module';
 import { CustomersModule } from './customers/customers.module';
 import { QuotesModule } from './quotes/quotes.module';
+import { SettingsModule } from './settings/settings.module';
+import { WarrantyModule } from './warranty/warranty.module';
+import { ShowroomsModule } from './showrooms/showrooms.module';
+import { PostsModule } from './posts/posts.module';
+import { BannersModule } from './banners/banners.module';
+import { ContentModule } from './content/content.module';
+import { ReviewsModule } from './reviews/reviews.module';
 
 @Module({})
 export class AppModule {
@@ -34,6 +41,8 @@ export class AppModule {
         QueueModule,
         RealtimeModule,
         AuditModule,
+        // Global: mọi module đọc cấu hình qua SettingsService
+        SettingsModule,
         AuthModule,
         CatalogModule,
         MediaModule,
@@ -41,6 +50,12 @@ export class AppModule {
         OrdersModule,
         CustomersModule,
         QuotesModule,
+        WarrantyModule,
+        ShowroomsModule,
+        PostsModule,
+        BannersModule,
+        ContentModule,
+        ReviewsModule,
       ],
       controllers: [
         HealthController,

@@ -21,10 +21,11 @@ export function useApiQuery<T>(
   const { authFetch, status } = useAuth();
 
   return useQuery<T, Error, T, readonly unknown[]>({
+    ...options,
     queryKey: key,
     queryFn: () => authFetch<T>(path),
+    // Đặt SAU ...options: nếu để trước, trang truyền `enabled` sẽ ghi đè mất điều kiện "đã đăng nhập"
     enabled: status === 'authenticated' && (options?.enabled ?? true),
-    ...options,
   });
 }
 

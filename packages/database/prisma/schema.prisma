@@ -28,7 +28,8 @@ enum Region {
   @@map("region")
 }
 
-/// Điểm tồn kho: kho tổng TP.HCM và các cửa hàng
+/// Showroom (type STORE) và kho di sản (WAREHOUSE, không dùng: công ty không giữ kho).
+/// Showroom dùng cho trang showroom trên website (SEO địa phương) và đơn "nhận tại showroom".
 model Location {
   id        String       @id @default(uuid(7)) @db.Uuid
   code      String       @unique @db.VarChar(32)
@@ -40,6 +41,30 @@ model Location {
   isActive  Boolean      @default(true) @map("is_active")
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // ----- Showroom (Bước 8). CHECK viết tay trong migration *_showrooms -----
+  /// Đường dẫn trang showroom: showroomPath() trong @ktm/shared
+  slug          String?   @unique @db.VarChar(120)
+  /// Địa chỉ chuẩn 2 cấp; cột address = "street, ward_name, province_name" do API dựng
+  provinceCode  String?   @map("province_code") @db.VarChar(10)
+  provinceName  String?   @map("province_name") @db.VarChar(100)
+  wardCode      String?   @map("ward_code") @db.VarChar(10)
+  wardName      String?   @map("ward_name") @db.VarChar(100)
+  street        String?
+  latitude      Float?
+  longitude     Float?
+  googleMapsUrl String?   @map("google_maps_url")
+  /// [{ "day": 1, "opens": "08:00", "closes": "21:00" }]; day 1 = Thứ Hai ... 7 = Chủ nhật; ngày không có = nghỉ
+  openingHours  Json      @default("[]") @map("opening_hours")
+  description   String?
+  email         String?   @db.VarChar(255)
+  /// Ảnh đầu tiên là ảnh đại diện. Lưu theo url như product_media: xóa ảnh thư viện phải kiểm tra cột này
+  imageUrls     String[]  @default([]) @map("image_urls")
+  /// Hiện trên website
+  isPublic      Boolean   @default(false) @map("is_public")
+  /// Lần đầu đăng lên website; từ đó đổi slug sẽ tạo redirect 301
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  sortOrder     Int       @default(0) @map("sort_order")
 
   stockLevels   StockLevel[]
   serialUnits   SerialUnit[]
@@ -148,6 +173,8 @@ model Category {
   children        Category[]       @relation("CategoryTree")
   products        Product[]
   specDefinitions SpecDefinition[]
+  /// Banner "đầu trang danh mục" riêng của danh mục này
+  banners         Banner[]
 
   voucherTargets VoucherTarget[]
 
@@ -2238,13 +2265,18 @@ model Banner {
   endsAt         DateTime?       @map("ends_at") @db.Timestamptz(3)
   sortOrder      Int             @default(0) @map("sort_order")
   isActive       Boolean         @default(true) @map("is_active")
+  /// Chỉ dùng với CATEGORY_TOP: hiện ở trang danh mục này; null = mọi danh mục (CHECK banners_category_placement)
+  categoryId     String?         @map("category_id") @db.Uuid
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   desktopMedia MediaAsset  @relation("BannerDesktopMedia", fields: [desktopMediaId], references: [id], onDelete: Restrict)
   mobileMedia  MediaAsset? @relation("BannerMobileMedia", fields: [mobileMediaId], references: [id], onDelete: SetNull)
+  /// Xóa danh mục thì xóa luôn banner riêng của nó (không để banner rơi thành "mọi danh mục")
+  category     Category?   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@index([placement, isActive, sortOrder])
+  @@index([categoryId])
   @@map("banners")
 }
 
@@ -2289,31 +2321,38 @@ model UrlRedirect {
 // ---------- Đánh giá ----------
 
 /// Đánh giá sản phẩm của khách đã mua (mỗi dòng đơn tối đa một đánh giá)
+/// Đánh giá sản phẩm. Khách viết thẳng trên trang sản phẩm (Bước 8), mọi đánh giá chờ duyệt.
+/// order_line_id có khi số điện thoại khớp một đơn Hoàn tất có sản phẩm này ("Đã mua hàng").
 model ProductReview {
-  id            String       @id @default(uuid(7)) @db.Uuid
-  productId     String       @map("product_id") @db.Uuid
-  orderLineId   String       @unique @map("order_line_id") @db.Uuid
-  customerId    String?      @map("customer_id") @db.Uuid
-  reviewerName  String       @map("reviewer_name") @db.VarChar(100)
-  rating        Int
-  content       String?
-  photos        Json         @default("[]")
-  status        ReviewStatus @default(PENDING)
-  moderatedById String?      @map("moderated_by_id") @db.Uuid
-  moderatedAt   DateTime?    @map("moderated_at") @db.Timestamptz(3)
-  rejectReason  String?      @map("reject_reason")
-  replyContent  String?      @map("reply_content")
-  repliedAt     DateTime?    @map("replied_at") @db.Timestamptz(3)
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String       @id @default(uuid(7)) @db.Uuid
+  productId        String       @map("product_id") @db.Uuid
+  orderLineId      String?      @unique @map("order_line_id") @db.Uuid
+  customerId       String?      @map("customer_id") @db.Uuid
+  reviewerName     String       @map("reviewer_name") @db.VarChar(100)
+  /// Dạng +84xxxxxxxxx. Không hiện công khai; mỗi số một đánh giá (chưa bị từ chối) cho mỗi sản phẩm
+  reviewerPhone    String       @map("reviewer_phone") @db.VarChar(16)
+  /// Số điện thoại khớp đơn Hoàn tất có sản phẩm này
+  verifiedPurchase Boolean      @default(false) @map("verified_purchase")
+  rating           Int
+  content          String?
+  photos           Json         @default("[]")
+  status           ReviewStatus @default(PENDING)
+  moderatedById    String?      @map("moderated_by_id") @db.Uuid
+  moderatedAt      DateTime?    @map("moderated_at") @db.Timestamptz(3)
+  rejectReason     String?      @map("reject_reason")
+  replyContent     String?      @map("reply_content")
+  repliedAt        DateTime?    @map("replied_at") @db.Timestamptz(3)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderLine   OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
-  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  moderatedBy Staff?    @relation("ReviewModeratedBy", fields: [moderatedById], references: [id], onDelete: Restrict)
+  product     Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderLine   OrderLine? @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+  customer    Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  moderatedBy Staff?     @relation("ReviewModeratedBy", fields: [moderatedById], references: [id], onDelete: Restrict)
 
   @@index([productId, status, createdAt])
   @@index([status, createdAt])
+  @@index([productId, reviewerPhone])
   @@map("product_reviews")
 }
 

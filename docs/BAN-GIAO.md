@@ -48,6 +48,8 @@ Thư mục: `~/Projects/huyhoang/khoathongminh`
 | exceljs | **4.4.0 ghim cứng** | Không còn bảo trì, chấp nhận vì chỉ nhân viên dùng |
 | sharp | 0.35 | Xử lý ảnh; server chỉ nhận **JPEG, PNG, WebP** |
 | jose + @node-rs/argon2 | 6.2 / 2.2 | JWT và băm mật khẩu |
+| TinyMCE (cloud) | `@tinymce/tinymce-react` **6.3.0**, bản TinyMCE 8 | Tải từ `cdn.tiny.cloud` bằng `NEXT_PUBLIC_TINYMCE_API_KEY` (`apps/admin/.env.local`). Gói `tinymce@8.9.1` chỉ cài **devDependencies để có kiểu**. Lên production phải thêm tên miền admin vào *Approved Domains* của tài khoản Tiny |
+| sanitize-html | 2.17.7 | Lọc HTML từ TinyMCE ở máy chủ (`apps/api/src/common/rich-text.ts`) |
 
 ## Cấu trúc
 
@@ -71,7 +73,7 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | Chủ đề | Quyết định |
 |---|---|
 | Kho | **Không quản lý kho.** Không nhập hàng, chuyển kho, kiểm kê. Các bảng kho trong database để nguyên, không dùng, không làm giao diện |
-| Showroom | Có showroom để khách xem hàng trưng bày, **không theo dõi hàng**. Thông tin showroom (bảng `locations`) dùng cho SEO địa phương và cho đơn nhận tại showroom |
+| Showroom | Có showroom để khách xem hàng trưng bày, **không theo dõi hàng**. Showroom = dòng `locations` có `type = STORE` (dòng `WAREHOUSE` là di sản, ẩn khỏi CMS, không chọn được làm nơi nhận hàng). Dùng cho SEO địa phương và cho đơn nhận tại showroom |
 | MISA | **Bỏ tích hợp**. Website là nơi quản lý đơn hàng và doanh thu |
 | Giá vốn, lợi nhuận | **Không theo dõi** |
 | Khách hàng | **Không đăng nhập**. Đặt hàng bằng số điện thoại. Khách công trình do nhân viên quản lý |
@@ -99,8 +101,25 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | Ghi nhận thanh toán | Nhân viên ghi khoản **đã thực nhận** (tiền mặt, chuyển khoản, COD). Không thu vượt, không hoàn quá. Ghi nhầm thì **hủy khoản** (giữ dấu vết), không xóa. Chuyển khoản tự sinh nội dung CK duy nhất `DH2609210003 1` |
 | Serial | Nhập tay, **mỗi máy một ô**, không bắt buộc đủ. Mở từ *Hàng về*, sau Hoàn tất vẫn ghi bổ sung được. Công ty **không dùng máy quét mã vạch** |
 | Địa chỉ | 2 cấp **34 tỉnh / 3.321 phường-xã** (Nghị quyết 202/2025/QH15). Dữ liệu cố định trong `apps/api/src/geo/vn-admin-units.ts`, trích từ gói MIT `vietnam-address-database@1.0.0` (không cài gói vào dự án) |
-| Ảnh | Lưu **trên server** (`MEDIA_ROOT`), đường dẫn `<năm>/<tháng>/<hash>.webp` |
-| Đánh giá | Chỉ khách đã mua, qua link có mã, nhân viên duyệt trước |
+| Ảnh | Lưu **trên server** (`MEDIA_ROOT`), đường dẫn `<năm>/<tháng>/<hash>.webp`. Ảnh khách gửi kèm đánh giá lưu riêng `reviews/<năm>/<tháng>/<uuid>.webp`, **không** vào Thư viện ảnh |
+| Đánh giá | Khách viết **thẳng ở trang sản phẩm** (đổi ở Bước 8, bỏ kiểu link mời; bảng `review_requests` để nguyên, không dùng). 5 lớp chặn: mọi đánh giá **chờ duyệt**; **bắt buộc SĐT** (không hiện công khai); SĐT khớp đơn *Hoàn tất* có sản phẩm → tự gắn **"Đã mua hàng"** (`verified_purchase` + `order_line_id`); mỗi SĐT **1 đánh giá chưa bị từ chối / sản phẩm**, 5 lần/giờ/IP; tối đa **5 ảnh × 5 MB**, từ chối thì xóa ảnh. Bắt buộc đồng ý chính sách dữ liệu cá nhân |
+
+### Nội dung và cấu hình (chốt ở Bước 8)
+
+| Chủ đề | Quyết định |
+|---|---|
+| Cấu hình | Chỉ khóa khai báo trong **registry** `packages/shared/src/settings.ts` mới đọc/sửa được (kèm schema Zod, nhãn tiếng Việt). Khóa di sản và khóa chưa có code dùng (`order.deposit_*`, `pricing.rounding_*`, `vat.default_rate_bps`, `payment.*`, `review.request_valid_days`...) **không khai báo nên tự ẩn**. Nguyên tắc: **chỉ hiện ô sửa xong có tác dụng thật**. 3 tab: Thông tin công ty / SEO chung / Quy tắc bán hàng. Khóa chưa có trong database dùng `defaultValue`, lần lưu đầu tự tạo dòng (không cần migration) |
+| Đọc cấu hình | Mọi module đọc qua `SettingsService` (module `@Global`): `values()`, `number(key)`, `text(key)`, `companyInfo()`. Cache Redis `settings:values:v1` 60 giây, lưu xong xóa cache; Redis lỗi thì đọc thẳng database |
+| VAT | Thuế suất nằm ở **từng biến thể** (`vatRateBps`) và được **chụp vào dòng đơn/báo giá** lúc tạo → đổi VAT không ảnh hưởng đơn cũ. `vat.default_rate_bps` chưa được dùng (tạo biến thể và nhập Excel đang gõ cứng 1000) |
+| Tra cứu bảo hành | Một ô tìm cùng lúc theo **SĐT** (đặt hàng, người nhận, khách, người liên hệ doanh nghiệp), **serial** (gõ một phần, ≥ 4 ký tự) và **mã đơn**. Hạn bảo hành là **ước tính**: ngày hoàn tất đơn + `warrantyMonths` hiện tại của sản phẩm (không chụp vào đơn). Nút "Sao chép báo hãng". Không dùng bảng `warranties`/`serial_units` |
+| Showroom trên website | Bật "Hiện trên website" phải có đường dẫn, địa chỉ chuẩn, SĐT, giờ mở cửa (tọa độ, ảnh, mô tả là nên có). Tắt showroom thì tự gỡ khỏi website. **Chỉ TP.HCM và Hà Nội** (cột `region` là enum `HCM/HN` dùng chung bảng giá; tỉnh khác cần migration thêm enum). Chỉ xóa được showroom **chưa có đơn** nhận hàng. Bản đồ nhúng `output=embed`, **không cần API key Google** |
+| Soạn nội dung | **TinyMCE** (bài viết, trang tĩnh, chính sách, câu trả lời FAQ). Trình duyệt gửi HTML, **máy chủ luôn lọc lại** bằng danh sách thẻ cho phép. Không có màu chữ, cỡ chữ, font; căn lề bằng class; tiêu đề trong bài chỉ h2–h4; có bảng và video **YouTube**; ảnh luôn tải lên Thư viện ảnh (kể cả dán/kéo thả), **chặn ảnh base64**. Cột `content_json` để `{}` |
+| Bài viết | Nháp → Đã đăng (ngay hoặc **hẹn giờ**) → Nháp; Nháp/Đã đăng → Lưu trữ → Nháp. Bắt buộc tiêu đề + nội dung; bài đang đăng không được sửa thành trống. Chỉ xóa bài **chưa từng lên website**. Đường dẫn `/bai-viet/<slug>` (`postPath()`). Chuyên mục xóa được (bài về "Chưa phân loại"). Tối đa 12 sản phẩm gắn kèm |
+| Trang tĩnh | Đường dẫn ngay dưới tên miền `/<slug>` (`pagePath()`), **chặn các slug dành riêng** `PAGE_RESERVED_SLUGS`. Không hẹn giờ, không chuyên mục. Quy tắc xóa/lưu trữ giống bài viết |
+| Chính sách | Theo **phiên bản, bất biến** (trigger database chặn UPDATE/DELETE `policy_versions`). Sửa = tạo bản mới (chép từ bản đang xem), hiệu lực ngay hoặc **ngày tương lai**, không lùi về quá khứ. Website hiện bản mới nhất đã tới hiệu lực. 6 loại cố định `POLICY_CODES`, đường dẫn `/chinh-sach/<slug>` (`policyPath()`). **Chỉ quản trị** (`setting.manage`) tạo phiên bản. Đặt hàng ghi đúng phiên bản `PRIVACY` đang hiện (chưa có thì dùng hằng `PRIVACY_POLICY_VERSION = '2026-09'`) |
+| FAQ | 5 nhóm cố định `FAQ_GROUPS`. Câu gắn sản phẩm hiện ở trang sản phẩm, câu chung ở trang FAQ. Sắp xếp theo nhóm hoặc theo sản phẩm. Ẩn/hiện, xóa được |
+| Banner | 4 vị trí `HOME_HERO`, `HOME_SECONDARY`, `CATEGORY_TOP`, `POPUP`, mỗi vị trí có kích thước ảnh khuyến nghị (`BANNER_PLACEMENT_INFO`). Ảnh điện thoại không bắt buộc. Tình trạng tự tính từ bật/tắt + thời gian chạy. `CATEGORY_TOP` chọn danh mục hoặc để trống = mọi danh mục; **xóa danh mục thì xóa banner riêng của nó** (Cascade). Link phải bắt đầu bằng `/` hoặc `https://`. Xóa được |
+| Đổi slug nội dung đã đăng | Sản phẩm, showroom, bài viết, trang tĩnh: **tự tạo redirect 301**, cùng quy tắc (xóa redirect xuất phát từ đường dẫn mới, trỏ lại các redirect cũ, không tạo chuỗi) |
 
 ### Sản phẩm và biến thể (chốt ở Bước 5)
 
@@ -109,7 +128,7 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | Biến thể | Người dùng nhập **"Tên biến thể: Màu sắc / Giá trị: Đen"** + **thuộc tính kết hợp** (App: TTLock). Bên dưới là `product_options` (tối đa **3**) và `product_option_values`. Mỗi biến thể có giá, SKU, ảnh riêng |
 | Thêm thuộc tính cho sản phẩm đã có biến thể | Hỏi "biến thể đang có thuộc giá trị nào"; biến thể cũ giữ SKU, giá, tồn kho, lịch sử. **Không hỗ trợ bớt thuộc tính** (gây trùng tổ hợp) — tắt biến thể thay thế |
 | Mã tùy chọn/giá trị | Sinh từ nhãn, **không bao giờ đổi** (ghép thành `optionKey`). Sửa nhãn thì chỉ đổi phần hiển thị. "ttlock" tự khớp "TTLock" đã có |
-| Tồn kho | **Không nhập ở biến thể**. Đi qua phiếu nhập/chuyển kho theo showroom (Bước 6) |
+| Tồn kho | **Không nhập ở biến thể**, và từ Bước 6 công ty **không quản lý kho** (xem mục Kho ở trên) |
 | Khóa SKU và serial | Khi biến thể đã có chứng từ hoặc dòng tồn kho |
 | Xóa biến thể | Chỉ khi chưa có giao dịch/khuyến mãi/combo. Còn lại chỉ **tắt**. Không tắt/xóa được biến thể cuối cùng đang bán của sản phẩm đang bán |
 | Trạng thái | Nháp → Đang bán (phải đủ checklist: biến thể bật có giá, có ảnh, đủ thông số bắt buộc, hãng/danh mục đang bật, combo có thành phần). Đang bán ↔ Nháp. Nháp/Đang bán → Lưu trữ (tắt mọi biến thể; chặn nếu nằm trong combo đang bán). **Lưu trữ → chỉ về Nháp** |
@@ -166,6 +185,49 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 - **Worker** đã kết nối database (`@ktm/database`, `DATABASE_URL`); hàng đợi `maintenance` với `upsertJobScheduler`
 - Thông tin công ty: các khóa `company.*` trong `system_settings` (migration chỉ chèn dữ liệu)
 
+**Bước 8: Nội dung + Cấu hình** ✅
+- **Cấu hình** `/cau-hinh`: 3 tab, form tự dựng từ registry, chỉ gửi ô đã đổi, chống ghi đè theo nhóm
+  (`pg_advisory_xact_lock` + `expectedUpdatedAt`), nhắc ô còn giá trị mẫu "Chưa cập nhật", ô mã Google nhận nguyên thẻ `<meta>`,
+  xem trước trên Google. Logo và ảnh chia sẻ tải lên Thư viện ảnh
+- **Tra cứu bảo hành** `/bao-hanh` (menu Bán hàng, cả 2 vai trò)
+- **Showroom** `/showroom`: danh sách, thêm, sửa (địa chỉ 2 cấp, dán tọa độ hoặc link Google Maps có bản đồ xem trước,
+  giờ mở cửa 7 ngày, tối đa 10 ảnh), thẻ Trạng thái liệt kê thiếu gì để đăng, xóa khi chưa có đơn
+- **Bài viết** `/bai-viet`: 5 tab (Tất cả/Nháp/Đã đăng/Hẹn giờ/Lưu trữ), trang soạn TinyMCE + ảnh bìa + chuyên mục + tóm tắt
+  + SEO + sản phẩm trong bài, nút "Lưu và đăng ngay"/Hẹn giờ; `/bai-viet/chuyen-muc`
+- **Banner** `/banner`: tab theo vị trí, hộp thoại thêm/sửa có nhắc ảnh lệch tỉ lệ, đổi thứ tự, bật/tắt, cảnh báo nhiều popup
+- **Trang tĩnh** `/trang`, **Chính sách** `/chinh-sach` (tổng quan 6 loại, lịch sử phiên bản, tạo bản mới có xác nhận),
+  **Câu hỏi thường gặp** `/cau-hoi` (tab nhóm + tab "Theo sản phẩm", TinyMCE bản gọn)
+- **Đánh giá** `/danh-gia`: tab Chờ duyệt (cũ nhất trước)/Đã duyệt/Từ chối, lọc sao, "Đã mua hàng", tìm SĐT;
+  xem ảnh phóng to; duyệt, từ chối (lý do bấm nhanh), gỡ xuống, duyệt lại, trả lời công khai.
+  Điểm sản phẩm (`rating_count`, `rating_sum`) do **trigger** tự tính từ đánh giá đã duyệt
+- `mapPrismaError` dịch lỗi CHECK/trigger (SQLSTATE `23514`) thành `VALIDATION_FAILED` thay vì `INTERNAL_ERROR`
+- Sửa lỗi `useApiQuery` (`...options` ghi đè điều kiện đăng nhập của `enabled`)
+- Migration Bước 8: `showrooms` (cột SEO cho `locations`), `banner_category` (`banners.category_id`),
+  `open_reviews` + `open_reviews_checks` (`order_line_id` cho trống, `reviewer_phone`, `verified_purchase`, viết lại trigger)
+
+### API nội dung và cấu hình (`/api/v1`, Bước 8)
+
+| Phương thức | Đường dẫn | Việc |
+|---|---|---|
+| GET / PATCH | `/settings`, `/settings/:group` | Cả 3 nhóm; lưu một nhóm (`company`, `seo`, `sales`), chỉ khóa đã đổi + `expectedUpdatedAt` |
+| GET | `/warranty/lookup?q=` | Tra cứu bảo hành (tối đa 50 đơn, không tính đơn hủy) |
+| GET / POST | `/showrooms` | Danh sách (chỉ `STORE`, kèm `missing`); thêm |
+| GET / PATCH / DELETE | `/showrooms/:id` | Chi tiết (kèm `orderCount`); sửa; xóa khi chưa có đơn |
+| GET / POST / PATCH / DELETE | `/post-categories`, `/post-categories/:id` | Chuyên mục bài viết |
+| GET / POST | `/posts` | Danh sách (kèm `statusCounts`); tạo |
+| GET / PATCH / DELETE | `/posts/:id` | Chi tiết; sửa; xóa (chỉ bài chưa từng đăng) |
+| POST | `/posts/:id/status` | `PUBLISH` (kèm `publishAt` để hẹn giờ), `UNPUBLISH`, `ARCHIVE`, `RESTORE` |
+| GET / POST | `/banners`; POST `/banners/reorder` | Danh sách; thêm; sắp xếp một vị trí (gửi đủ id) |
+| PATCH / DELETE | `/banners/:id` | Sửa; xóa |
+| GET / POST | `/pages`; GET/PATCH/DELETE `/pages/:id`; POST `/pages/:id/status` | Trang tĩnh |
+| GET | `/policies`, `/policies/:code/versions`, `/policies/versions/:id` | Tổng quan; lịch sử; một phiên bản |
+| POST | `/policies/versions` | Tạo phiên bản (quyền `setting.manage`) |
+| GET / POST | `/faqs?groupCode=&productId=&scope=`; POST `/faqs/reorder` | FAQ; sắp xếp theo nhóm hoặc sản phẩm |
+| PATCH / DELETE | `/faqs/:id` | Sửa; xóa |
+| POST | `/shop/reviews` | **Công khai**, `multipart/form-data` (trường chữ + tối đa 5 file `photos`), 5 lần/giờ/IP |
+| GET | `/reviews?status=&rating=&verified=&search=` | Danh sách duyệt (kèm `statusCounts`) |
+| POST / PUT | `/reviews/:id/approve`, `/reviews/:id/reject`, `/reviews/:id/reply` | Duyệt; từ chối (bắt buộc `reason`); trả lời (`content: null` để gỡ) |
+
 ### API khách hàng, báo giá (`/api/v1`)
 
 | Phương thức | Đường dẫn | Việc |
@@ -214,10 +276,13 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 |---|---|
 | 6. Đơn hàng | ✅ Xong |
 | 7. Khách hàng + Báo giá công trình | ✅ Xong |
-| **8. Nội dung + Cấu hình** (tiếp theo) | Trang **Cấu hình**: thông tin công ty (sửa các khóa `company.*`, logo), SEO chung (tiêu đề/mô tả mặc định, ảnh chia sẻ, xác minh Google), quy tắc bán hàng (ngưỡng duyệt, hiệu lực báo giá, VAT), ẩn cấu hình di sản. **Showroom** (địa chỉ, giờ mở cửa, bản đồ, `LocalBusiness`). Bài viết, banner, đánh giá. **Tra cứu bảo hành** theo SĐT/serial |
-| **9. Storefront + thiết kế giao diện** | Website bán hàng, form đặt hàng ngắn gọn |
+| 8. Nội dung + Cấu hình | ✅ Xong |
+| **9. Hệ thống** (tiếp theo, đề xuất) | Các mục menu còn "Sắp có": **Nhân viên** (danh sách, thêm, khóa tài khoản, đặt lại mật khẩu, phiên đăng nhập — hiện chỉ có CLI), **Nhật ký** (xem `audit_logs`, lọc theo người/hành động/đối tượng), **Giá và khuyến mãi** (bảng giá nhóm, flash sale, voucher, quà tặng — bảng đã có, chưa áp vào đơn), **Báo cáo** (doanh thu theo đơn Hoàn tất, theo kênh, nhân viên, sản phẩm) |
+| 10. Storefront | Website bán hàng: form đặt hàng ngắn gọn, endpoint công khai cho showroom, bài viết, banner đang chạy, trang tĩnh, chính sách, FAQ, đánh giá đã duyệt; ô viết đánh giá có ảnh; sitemap, schema.org (`Product`, `LocalBusiness`, `FAQPage`, `Article`), dữ liệu SEO từ `/settings` phần công khai |
+| 11. Triển khai | Máy chủ, Nginx, HTTPS, sao lưu database và `MEDIA_ROOT`, giám sát |
+| 12. Giao diện | Chỉnh giao diện CMS và storefront một lượt bằng Claude Design |
 
-Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau.
+Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau. Thứ tự Bước 9–12 là đề xuất, chốt lại khi bắt đầu.
 
 **Migration `orders_brand_sourcing`** (Bước 6): thêm trạng thái `ORDERED_FROM_BRAND`, `GOODS_ARRIVED`;
 cột `ship_address_raw`, `brand_order_ref`, `brand_ordered_at`, `goods_arrived_at`, `scheduled_at`,
@@ -233,7 +298,6 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Ô "Nhóm lắp đặt" trong form sản phẩm (làm cùng Bước 9)
 - Sửa alt text ảnh; gán lại ảnh sang biến thể khác
 - Migration thêm `product_media.media_asset_id` (FK Restrict) thay cho việc đối chiếu theo `url`
-- `lib/hooks.ts` `useApiQuery`: `...options` đang ghi đè điều kiện "đã đăng nhập" của `enabled`
 - Cảnh báo rời trang khi còn thay đổi chưa lưu chỉ chạy lúc đóng tab/tải lại, chưa chặn khi bấm menu
 - Trang Hãng/Danh mục hiển thị tách "N sản phẩm · M lưu trữ"
 - Có thể viết thêm migration CHECK thời gian cho `ORDERED_FROM_BRAND`/`GOODS_ARRIVED` (sau khi enum đã có)
@@ -242,11 +306,21 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Đổi hình thức nhận hàng (giao tận nơi ↔ nhận tại showroom) sau khi đã tạo đơn
 - Cân nhắc cho nhân viên KD quyền `order.cancel`
 - In phiếu giao hàng / phiếu xác nhận đơn cho khách
-- Cấu hình di sản không còn dùng: `checkout.hold_minutes`, `payment.vnpay_session_minutes`, `inventory.transfer_stale_days`,
-  `vendor_return.stale_days`, `warranty.exchange_window_days` → ẩn ở trang Cấu hình (Bước 8)
 - Trang chi tiết đơn: hiện liên kết về báo giá gốc (đơn kênh Công trình có `quote_id`)
 - Tạo PDF phía máy chủ (hiện dùng "Lưu thành PDF" của trình duyệt)
 - Nhóm khách có `discount_bps` nhưng chưa áp giá theo nhóm (các lớp giá sẽ làm cùng Flash sale/voucher)
+- **Chỉnh UI/UX toàn CMS một lượt** (Dennis ghi lại/chụp màn hình chỗ xấu, khó dùng trong lúc thử)
+- Nối `vat.default_rate_bps` vào tạo biến thể và nhập Excel, rồi mới đưa ô VAT lên trang Cấu hình
+- Ghi lại lần đồng ý chính sách **mới** của khách cũ (hiện chỉ ghi lần đồng ý đầu tiên) — làm cùng trang đặt hàng Bước 10
+- Xóa sản phẩm thì đánh giá bị xóa theo (Cascade) nhưng **file ảnh đánh giá còn trên ổ đĩa**
+- Ảnh đánh giá đang chờ duyệt vẫn mở được nếu biết đúng đường dẫn (tên ngẫu nhiên). Cần chặn hẳn thì phục vụ qua API có kiểm tra
+- Lỗi multer khi ảnh quá cỡ trả câu tiếng Anh (storefront nên kiểm tra dung lượng trước khi gửi)
+- Cảnh báo `DeprecationWarning: Calling client.query() when the client is already executing a query` của `pg` trong log API
+- Tra cứu serial quét cả bảng `order_lines`; đơn nhiều lên thì thêm chỉ mục trigram (`pg_trgm`)
+- Hạn bảo hành tính theo `warrantyMonths` **hiện tại** của sản phẩm; cần chính xác thì thêm cột `order_lines.warranty_months`
+- Showroom ngoài TP.HCM/Hà Nội: migration thêm giá trị enum `region`
+- Chọn ảnh có sẵn từ Thư viện ảnh (hiện các ô ảnh ở Cấu hình, Showroom, Bài viết, Banner chỉ có "Tải ảnh lên")
+- Lưu nháp bài viết/chính sách vào `localStorage` phòng mất khi trình duyệt lỗi
 
 ## Quy ước code
 
@@ -286,6 +360,28 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Mã chứng từ: `nextDocumentCode(tx, DOCUMENT_PREFIX.X)` trong `apps/api/src/common/document-code.ts`, gọi TRONG transaction
 - Số điện thoại: lưu `+84...` (`normalizeVnPhone`), hiển thị `0901 234 567` (`formatVnPhone`), cùng trong `shared`
 - Giờ nhập/hiển thị ở admin: `toLocalInput` / `fromLocalInput` / `formatDateTimeVn` (giờ Việt Nam) trong `lib/order-types.ts`
+- **Cấu hình mới**: khai báo khóa trong registry `packages/shared/src/settings.ts` (nhóm, nhãn, `input`, schema trả về `string | number`,
+  `defaultValue`) → build shared → đọc bằng `SettingsService`. Không đọc thẳng bảng `system_settings`
+- **Nội dung soạn bằng TinyMCE**: giao diện dùng `RichTextEditor` (`compact` cho ô ngắn), máy chủ **luôn** gọi `sanitizeRichHtml()`
+  trong `apps/api/src/common/rich-text.ts` trước khi lưu. Thêm nút/định dạng ở trình soạn thảo thì **thêm thẻ/thuộc tính tương ứng
+  vào danh sách lọc**, nếu không sẽ bị bỏ khi lưu. Hiển thị lại trong CMS bằng `RichHtmlView` (chỉ cho HTML từ API)
+- So sánh "có thay đổi chưa lưu" với nội dung TinyMCE: lấy HTML **sau khi TinyMCE chuẩn hóa** (`onReady`) làm mốc
+- Đường dẫn trên website **chỉ lấy từ hàm trong `shared`**: `productPath`, `postPath`, `pagePath`, `policyPath`, `showroomPath`
+  (API dùng khi tạo redirect, storefront dùng khi dựng link)
+- **Ảnh lưu theo `url` (không có khóa ngoại)** phải được đếm trong `ImageService.remove` trước khi cho xóa ở Thư viện ảnh:
+  `product_media.url`, khóa ảnh trong `system_settings` (`input: 'image'`), `locations.image_urls`, `posts.content_html`.
+  Ảnh bìa bài viết và ảnh banner có khóa ngoại tới `media_assets`. Thêm chỗ mới lưu ảnh theo url thì **thêm vào đây**
+- Sắp xếp thứ tự (banner, FAQ): endpoint `POST .../reorder` gửi **đủ id** của phạm vi theo thứ tự mới; thiếu/thừa → `EDIT_CONFLICT`.
+  Route `reorder` khai báo **trước** `:id`
+- Không có cột phiên bản: khóa lạc quan bằng `updateMany({ where: { id, updatedAt } })`; nhóm không có dòng cố định (cấu hình)
+  thì dùng `pg_advisory_xact_lock(hashtext(...))`
+- Cho phép một dữ liệu trùng có điều kiện (vd: mỗi SĐT một đánh giá chưa bị từ chối) mà **không** tạo chỉ mục viết tay:
+  khóa `pg_advisory_xact_lock` theo khóa nghiệp vụ rồi kiểm tra trong cùng transaction
+- Upload công khai: gửi **một lần** cả chữ lẫn file (`multipart`, `FilesInterceptor` có `limits`), xử lý ảnh trước transaction,
+  transaction lỗi thì dọn file. Kiểm tra byte đầu file, không tin đuôi tên file; `sharp().rotate()` rồi xuất WebP để bỏ EXIF/GPS
+- Trang có bộ lọc/tab: đặt trên URL (`?status=`, `?tab=`...) bằng `router.replace(..., { scroll: false })`, bọc `<Suspense>`
+- Trang soạn nội dung dài: `staleTime: Infinity, refetchOnWindowFocus: false` để không tự tải lại đè phần đang viết
+- File tải về trùng tên (`page.tsx`...): Claude đặt tên riêng khi gửi (`bai-viet-id-page.tsx`), lệnh `cp` đặt lại tên đúng
 
 ## Bẫy đã gặp (đừng lặp lại)
 
@@ -317,6 +413,15 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 | Dòng báo giá không sửa được | Trigger `quote_lines_draft_only`: chỉ khi báo giá **Nháp**. Đã gửi → tạo phiên bản mới |
 | Tạo phiên bản mới báo giá lỗi trùng | Unique `quotes_one_current_revision`: chuyển bản cũ sang `SUPERSEDED` **trước**, rồi mới thêm bản mới (cùng transaction) |
 | Worker thêm dependency workspace | `pnpm install` rồi `pnpm --filter @ktm/database build` trước khi chạy worker |
+| Nối SQL viết tay vào migration (`cat ... >>`) không thành công mà vẫn chạy `migrate dev` | Database thiếu CHECK/trigger mới mà không báo gì (lỗi lộ ra lúc chạy: trigger cũ chặn). **Luôn `grep` kiểm tra SQL đã nằm trong file trước khi `migrate dev`**. Migration đã chạy thì không sửa; tạo migration mới viết kiểu **chạy lặp không sao** (`DROP CONSTRAINT IF EXISTS` rồi `ADD`, `CREATE OR REPLACE FUNCTION`) |
+| Nới ràng buộc cột (vd `order_line_id` cho trống) mà quên trigger cũ | Rà các trigger đang kiểm tra cột đó (`grep` trong migration `platform`) và viết lại cùng lúc |
+| Lỗi CHECK/trigger thành `INTERNAL_ERROR` | Đã sửa `mapPrismaError` (SQLSTATE `23514`). Trigger tự viết nên `RAISE EXCEPTION` bằng **tiếng Việt** vì câu này hiện cho người dùng |
+| Zod: schema dựng động từ danh sách (registry) | TypeScript suy ra `unknown` → khai báo rõ kiểu trả về (`z.ZodType<...>`) |
+| TinyMCE tự sửa HTML lúc mở | Vừa mở đã báo "có thay đổi" → lấy HTML đã chuẩn hóa ở `onInit` làm mốc (xem `RichTextEditor onReady`) |
+| `.env.local` của admin không có tác dụng | Next.js chỉ đọc lúc khởi động → tắt rồi chạy lại `pnpm dev` |
+| Tên icon trong `navigation.ts` sai | `app-shell` tự thay bằng hình tròn, không báo lỗi → kiểm tra tên trên lucide.dev |
+| Link rút gọn `maps.app.goo.gl` | Không đọc được tọa độ; dán dòng tọa độ (chuột phải trên Google Maps) hoặc link đầy đủ |
+| `curl: (26) Failed to open/read local data` | File đính kèm `-F photos=@...` không tồn tại |
 | `pnpm dev` lỗi `ENOTEMPTY ... generated/prisma` | `database:build` và `database:dev` cùng chạy `prisma generate`. Đã thêm `packages/database/turbo.json` (dev phụ thuộc build) và bỏ `prisma generate` khỏi script `dev` |
 
 ## Khởi động
@@ -334,25 +439,30 @@ Xem thêm `README.md` ở thư mục gốc.
 
 ## Gom code cho cuộc trò chuyện mới
 
-Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared và các module API liên quan.
-Sửa danh sách `MODULES` theo bước sắp làm (Bước 8: `catalog|media|orders|quotes|customers|common|auth|audit`). Muốn gom kèm SQL migration thì thêm
-vòng `for f in packages/database/prisma/migrations/*/migration.sql; do ...; done` trước `} > "$OUT"`.
+Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared, worker, các module API liên quan và SQL migration.
+Sửa danh sách `MODULES` theo bước sắp làm. Bước 9 (Hệ thống) cần: `auth|audit|common|settings|catalog|orders|quotes|customers|redis|config`.
+Module API hiện có: `auth audit banners catalog common config content customers database geo media orders posts quotes redis reviews settings showrooms warranty`.
+File `vn-admin-units.ts` (3.321 phường-xã) bị bỏ ra vì rất nặng.
 
 ```bash
 cd ~/Projects/huyhoang/khoathongminh
 OUT="$HOME/Desktop/ktm-context.txt"
-MODULES='catalog|media|audit|common|auth'
+MODULES='auth|audit|common|settings|catalog|orders|quotes|customers|redis|config'
 {
   echo '##### CAY THU MUC #####'
   git ls-files --cached --others --exclude-standard apps packages | grep -vE 'node_modules|\.next|dist/'
   git ls-files --cached --others --exclude-standard \
-    | grep -E "^(apps/admin/src|packages/shared/src|apps/api/src/($MODULES))/" \
+    | grep -E "^(apps/admin/src|packages/shared/src|apps/worker/src|apps/api/src/($MODULES))/" \
     | grep -E '\.(ts|tsx)$' \
     | grep -vE '\.(spec|test)\.tsx?$' \
+    | grep -v 'vn-admin-units.ts' \
     | while IFS= read -r f; do
         echo; echo "##### FILE: $f #####"; cat "$f"
       done
-  for f in apps/api/src/app.module.ts apps/admin/package.json apps/api/package.json; do
+  for f in packages/database/prisma/migrations/*/migration.sql packages/database/src/seed.ts; do
+    [ -f "$f" ] && { echo; echo "##### FILE: $f #####"; cat "$f"; }
+  done
+  for f in apps/api/src/app.module.ts apps/api/src/main.ts apps/admin/package.json apps/api/package.json; do
     echo; echo "##### FILE: $f #####"; cat "$f"
   done
 } > "$OUT"

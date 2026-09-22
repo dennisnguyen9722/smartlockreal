@@ -22,7 +22,7 @@ export interface NavGroup {
  * Các trang chưa làm vẫn để sẵn để thấy toàn cảnh hệ thống.
  *
  * Không có nhóm Kho và Dịch vụ: công ty không giữ kho, lắp đặt và bảo hành do hãng làm
- * (quyết định ở Bước 6). Tra cứu bảo hành sẽ thêm ở Bước 8.
+ * (quyết định ở Bước 6). Công ty chỉ TRA CỨU bảo hành (đơn, serial, ngày giao) để báo hãng.
  */
 export const ADMIN_NAV: NavGroup[] = [
   {
@@ -31,6 +31,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { label: 'Đơn hàng', href: '/don-hang', icon: 'ShoppingCart', permission: 'order.view', ready: true },
       { label: 'Báo giá công trình', href: '/bao-gia', icon: 'FileText', permission: 'quote.view', ready: true },
       { label: 'Khách hàng', href: '/khach-hang', icon: 'Users', permission: 'customer.view', ready: true },
+      { label: 'Tra cứu bảo hành', href: '/bao-hanh', icon: 'ShieldCheck', permission: 'warranty.view', ready: true },
     ],
   },
   {
@@ -45,8 +46,13 @@ export const ADMIN_NAV: NavGroup[] = [
     label: 'Nội dung',
     items: [
       { label: 'Thư viện ảnh', href: '/thu-vien-anh', icon: 'Images', permission: 'content.view', ready: true },
-      { label: 'Bài viết', href: '/bai-viet', icon: 'Newspaper', permission: 'content.view' },
-      { label: 'Đánh giá', href: '/danh-gia', icon: 'Star', permission: 'review.moderate' },
+      { label: 'Showroom', href: '/showroom', icon: 'Store', permission: 'content.view', ready: true },
+      { label: 'Bài viết', href: '/bai-viet', icon: 'Newspaper', permission: 'content.view', ready: true },
+      { label: 'Banner', href: '/banner', icon: 'GalleryHorizontal', permission: 'content.view', ready: true },
+      { label: 'Trang tĩnh', href: '/trang', icon: 'StickyNote', permission: 'content.view', ready: true },
+      { label: 'Chính sách', href: '/chinh-sach', icon: 'Scale', permission: 'content.view', ready: true },
+      { label: 'Câu hỏi thường gặp', href: '/cau-hoi', icon: 'CircleHelp', permission: 'content.view', ready: true },
+      { label: 'Đánh giá', href: '/danh-gia', icon: 'Star', permission: 'review.moderate', ready: true },
     ],
   },
   {
@@ -55,7 +61,7 @@ export const ADMIN_NAV: NavGroup[] = [
       { label: 'Giá và khuyến mãi', href: '/gia-khuyen-mai', icon: 'Tags', permission: 'pricing.view' },
       { label: 'Báo cáo', href: '/bao-cao', icon: 'ChartColumn', permission: 'report.view' },
       { label: 'Nhân viên', href: '/nhan-vien', icon: 'UserCog', permission: 'staff.manage' },
-      { label: 'Cấu hình', href: '/cau-hinh', icon: 'Settings', permission: 'setting.manage' },
+      { label: 'Cấu hình', href: '/cau-hinh', icon: 'Settings', permission: 'setting.manage', ready: true },
       { label: 'Nhật ký', href: '/nhat-ky', icon: 'ScrollText', permission: 'audit.view' },
     ],
   },

@@ -4,7 +4,6 @@ import {
   ErrorCode,
   OPEN_QUOTE_STATUSES,
   QUOTE_STATUS_LABEL,
-  type CompanyInfo,
   type Paginated,
   type QuoteActionInput,
   type QuoteConvertInput,
@@ -21,6 +20,7 @@ import { AppException } from '../common/errors/app.exception';
 import { mapPrismaError } from '../common/errors/prisma-error';
 import { PRISMA } from '../database/database.module';
 import { OrderService } from '../orders/order.service';
+import { SettingsService } from '../settings/settings.service';
 
 type Tx = Prisma.TransactionClient;
 type FieldError = { field: string; message: string };
@@ -89,6 +89,7 @@ export class QuoteService {
     @Inject(PRISMA) private readonly db: PrismaClient,
     private readonly audit: AuditService,
     private readonly orders: OrderService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   // ================= Danh sách, chi tiết =================
@@ -179,7 +180,7 @@ export class QuoteService {
         orderBy: { revision: 'desc' },
         select: { id: true, revision: true, status: true, grandTotal: true, createdAt: true },
       }),
-      this.settings(),
+      this.quoteRules(),
     ]);
     return {
       ...quote,
@@ -195,7 +196,7 @@ export class QuoteService {
 
   async create(input: QuoteCreateInput, staffId: string, ctx: AuditContext) {
     await this.assertCustomerAndContact(input.customerId, input.contactId ?? null);
-    const settings = await this.settings();
+    const settings = await this.quoteRules();
 
     try {
       const quote = await this.db.$transaction(async (tx) => {
@@ -297,7 +298,7 @@ export class QuoteService {
     if (quote.status !== 'DRAFT') {
       invalid([{ field: 'lines', message: 'Chỉ sửa sản phẩm khi báo giá còn Nháp' }]);
     }
-    const settings = await this.settings();
+    const settings = await this.quoteRules();
 
     try {
       await this.db.$transaction(async (tx) => {
@@ -433,7 +434,7 @@ export class QuoteService {
     if (!(['SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED'] as QuoteStatusValue[]).includes(quote.status)) {
       invalid([{ field: 'status', message: 'Chỉ tạo phiên bản mới khi báo giá đã gửi khách. Chưa gửi thì đưa về Nháp để sửa.' }]);
     }
-    const settings = await this.settings();
+    const settings = await this.quoteRules();
 
     try {
       const created = await this.db.$transaction(async (tx) => {
@@ -602,29 +603,8 @@ export class QuoteService {
 
   /** Dữ liệu trang in: báo giá + thông tin công ty mới nhất */
   async printData(id: string) {
-    const [quote, company] = await Promise.all([this.getById(id), this.companyInfo()]);
+    const [quote, company] = await Promise.all([this.getById(id), this.settingsService.companyInfo()]);
     return { quote, company };
-  }
-
-  private async companyInfo(): Promise<CompanyInfo> {
-    const rows = await this.db.systemSetting.findMany({ where: { key: { startsWith: 'company.' } } });
-    const read = (key: string) => {
-      const value = rows.find((row) => row.key === `company.${key}`)?.value;
-      return typeof value === 'string' ? value : '';
-    };
-    return {
-      name: read('name'),
-      brandName: read('brand_name'),
-      taxCode: read('tax_code'),
-      address: read('address'),
-      hotline: read('hotline'),
-      email: read('email'),
-      website: read('website'),
-      logoUrl: read('logo_url'),
-      bankName: read('bank_name'),
-      bankAccount: read('bank_account'),
-      bankAccountName: read('bank_account_name'),
-    };
   }
 
   // ================= Nội bộ =================
@@ -680,16 +660,13 @@ export class QuoteService {
     };
   }
 
-  /** Ngưỡng duyệt và số ngày hiệu lực, đọc từ system_settings để đổi được mà không sửa code */
-  private async settings() {
-    const rows = await this.db.systemSetting.findMany({
-      where: { key: { in: ['quote.approval_threshold_bps', 'quote.default_valid_days'] } },
-    });
-    const read = (key: string, fallback: number) => {
-      const value = Number(rows.find((row) => row.key === key)?.value);
-      return Number.isFinite(value) ? value : fallback;
-    };
-    return { thresholdBps: read('quote.approval_threshold_bps', 1000), validDays: read('quote.default_valid_days', 15) };
+  /** Ngưỡng duyệt và số ngày hiệu lực: sửa ở trang Cấu hình, tab Quy tắc bán hàng */
+  private async quoteRules() {
+    const [thresholdBps, validDays] = await Promise.all([
+      this.settingsService.number('quote.approval_threshold_bps'),
+      this.settingsService.number('quote.default_valid_days'),
+    ]);
+    return { thresholdBps, validDays };
   }
 
   private async assertCustomerAndContact(customerId: string, contactId: string | null) {
