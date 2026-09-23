@@ -50,6 +50,7 @@ Thư mục: `~/Projects/huyhoang/khoathongminh`
 | jose + @node-rs/argon2 | 6.2 / 2.2 | JWT và băm mật khẩu |
 | TinyMCE (cloud) | `@tinymce/tinymce-react` **6.3.0**, bản TinyMCE 8 | Tải từ `cdn.tiny.cloud` bằng `NEXT_PUBLIC_TINYMCE_API_KEY` (`apps/admin/.env.local`). Gói `tinymce@8.9.1` chỉ cài **devDependencies để có kiểu**. Lên production phải thêm tên miền admin vào *Approved Domains* của tài khoản Tiny |
 | sanitize-html | 2.17.7 | Lọc HTML từ TinyMCE ở máy chủ (`apps/api/src/common/rich-text.ts`) |
+| Be Vietnam Pro | qua `next/font/google` | Phông CMS, có bộ dấu tiếng Việt đầy đủ; nạp ở `apps/admin/src/app/layout.tsx`, biến `--font-be-vietnam-pro` |
 
 ## Cấu trúc
 
@@ -120,6 +121,20 @@ packages/ui        Tailwind 4 + shadcn/ui dùng chung
 | FAQ | 5 nhóm cố định `FAQ_GROUPS`. Câu gắn sản phẩm hiện ở trang sản phẩm, câu chung ở trang FAQ. Sắp xếp theo nhóm hoặc theo sản phẩm. Ẩn/hiện, xóa được |
 | Banner | 4 vị trí `HOME_HERO`, `HOME_SECONDARY`, `CATEGORY_TOP`, `POPUP`, mỗi vị trí có kích thước ảnh khuyến nghị (`BANNER_PLACEMENT_INFO`). Ảnh điện thoại không bắt buộc. Tình trạng tự tính từ bật/tắt + thời gian chạy. `CATEGORY_TOP` chọn danh mục hoặc để trống = mọi danh mục; **xóa danh mục thì xóa banner riêng của nó** (Cascade). Link phải bắt đầu bằng `/` hoặc `https://`. Xóa được |
 | Đổi slug nội dung đã đăng | Sản phẩm, showroom, bài viết, trang tĩnh: **tự tạo redirect 301**, cùng quy tắc (xóa redirect xuất phát từ đường dẫn mới, trỏ lại các redirect cũ, không tạo chuỗi) |
+
+### Hệ thống và báo cáo (chốt ở Bước 9)
+
+| Chủ đề | Quyết định |
+|---|---|
+| Giá và khuyến mãi | **BỎ module này.** Giá sau chiết khấu nhập thẳng vào giá niêm yết của biến thể; muốn khách thấy đang giảm thì dùng giá gạch ngang `compareAtPrice`. Các bảng flash sale, voucher, bảng giá nhóm giữ trong database nhưng không dùng, không có giao diện (như các bảng kho). Mục này đã bỏ khỏi menu |
+| Nhân viên | **Không xóa nhân viên đang dùng**: đơn, báo giá, nhật ký đều trỏ tới (`Restrict`). Chỉ xóa được tài khoản **chưa từng đăng nhập và chưa có chứng từ** (tạo nhầm email); còn lại thì **khóa**. Luôn còn ít nhất một quản trị đang hoạt động; không tự khóa / tự đổi vai trò / tự đặt lại mật khẩu của chính mình |
+| Mật khẩu | Quản trị tạo tài khoản hoặc đặt lại mật khẩu → hệ thống sinh **mật khẩu tạm** dạng `Kt7m-Xp4q-Rw9z` (bỏ ký tự dễ nhầm), **chỉ hiện một lần**, không lưu, không ghi nhật ký. Nhân viên tự đổi ở `/tai-khoan` (phải nhập mật khẩu hiện tại) |
+| Thu hồi phiên | Khóa tài khoản, đổi vai trò, đặt lại mật khẩu → **thu hồi mọi phiên ngay** (đánh dấu Redis như `AuthService`), vì quyền nằm trong access token còn hạn 15 phút |
+| Nhật ký | Chỉ ĐỌC, không sửa không xóa. Hành động lưu dạng `<đối tượng>.<việc>`; nhãn tiếng Việt trong `AUDIT_ACTION_LABEL` (`packages/shared/src/schemas/audit.ts`) — thêm hành động mới ở API thì thêm nhãn ở đây |
+| Doanh thu | Ghi nhận khi đơn **Hoàn tất**, tính theo `completed_at`, gom nhóm theo **giờ Việt Nam**. Đơn đang xử lý chưa tính. "Còn phải thu" = tổng tiền đơn hoàn tất trừ đã thu. "Bán chạy" chỉ tính dòng `PRODUCT` và `BUNDLE` (các dòng khác giá 0 nên không đếm trùng) |
+| Ai xem được tiền | `report.view` chỉ quản trị. Nhân viên kinh doanh **không thấy doanh thu** ở trang chủ lẫn menu Báo cáo; trang chủ của họ chỉ đếm việc của chính mình |
+| Trang chủ CMS | Trả lời "hôm nay phải làm gì": việc cần làm trước, số liệu sau. Mỗi ô dẫn sang danh sách đã lọc sẵn qua URL |
+| Giao diện CMS | Giữ nguyên bảng màu hiện có; bảng màu và nhận diện sẽ chốt **cùng lúc với storefront** (Bước 10–12). Logo chưa có, làm sau |
 
 ### Sản phẩm và biến thể (chốt ở Bước 5)
 
@@ -205,6 +220,34 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 - Migration Bước 8: `showrooms` (cột SEO cho `locations`), `banner_category` (`banners.category_id`),
   `open_reviews` + `open_reviews_checks` (`order_line_id` cho trống, `reviewer_phone`, `verified_purchase`, viết lại trigger)
 
+**Bước 9: Hệ thống** ✅
+- **Nhân viên** `/nhan-vien`: danh sách, thêm (mật khẩu tạm hiện một lần, kèm nút sao chép tin nhắn gửi nhân viên),
+  sửa, đổi vai trò, khóa/mở, gỡ khóa tạm, đặt lại mật khẩu, xem và đăng xuất từng phiên hoặc tất cả, xóa tài khoản chưa từng dùng
+- **Tài khoản của tôi** `/tai-khoan`: đổi mật khẩu (có danh sách yêu cầu tự tick), xem máy đang đăng nhập,
+  đăng xuất từng máy hoặc mọi máy khác. Vào bằng cách bấm tên mình ở đáy menu trái
+- **Nhật ký** `/nhat-ky`: lọc theo người, nhóm hành động, hành động, khoảng thời gian; mở từng dòng xem bảng
+  Trường / Trước / Sau, IP, thiết bị, traceId; nút "Xem toàn bộ lịch sử của đối tượng này"
+- **Báo cáo** `/bao-cao`: chọn kỳ nhanh hoặc tự chọn, 7 ô số tổng quan (doanh thu và số đơn có so sánh kỳ trước),
+  biểu đồ cột vẽ bằng SVG thuần (không thêm thư viện), doanh thu theo kênh bán và theo nhân viên, top 10 bán chạy
+- **Trang chủ** `/`: ô việc cần làm (đơn chờ xác nhận, chờ hàng về, đang giao lắp, báo giá chờ duyệt,
+  báo giá sắp hết hạn, đơn chưa thu đủ, đánh giá chờ duyệt) + doanh thu và hoạt động gần đây cho quản trị
+- Trang Đơn hàng và Báo giá đọc bộ lọc từ URL (`?status=...&mine=true`) để trang chủ dẫn sang được
+- **Giao diện nền (9.5)**: phông Be Vietnam Pro, chữ số cùng bề rộng toàn hệ thống, menu trái gọn (mục đang mở
+  dùng vạch trái, khối tài khoản ở đáy), bảng dày hơn, màn hình lỗi/trống rõ ràng hơn, phân trang tự ẩn khi chỉ có 1 trang
+
+### API hệ thống (`/api/v1`, Bước 9)
+
+| Phương thức | Đường dẫn | Việc |
+|---|---|---|
+| GET / POST | `/staff` | Danh sách nhân viên; tạo (trả mật khẩu tạm một lần) |
+| GET / PATCH / DELETE | `/staff/:id` | Chi tiết (kèm phiên, thống kê); sửa; xóa khi chưa từng dùng |
+| POST | `/staff/:id/status` | `DISABLE`, `ENABLE`, `UNLOCK` |
+| POST | `/staff/:id/reset-password`, `/staff/:id/revoke-sessions` | Đặt lại mật khẩu; đăng xuất khỏi mọi máy |
+| GET / DELETE | `/staff/me/sessions`, `/staff/me/sessions/:id` | Phiên của chính mình; đăng xuất phiên khác hoặc một phiên |
+| GET | `/audit-logs`, `/audit-logs/actors` | Nhật ký có lọc; danh sách người từng thao tác |
+| GET | `/reports/overview?from=&to=` | Báo cáo đầy đủ (quyền `report.view`) |
+| GET | `/reports/dashboard` | Trang chủ; nội dung tự cắt theo quyền của người đăng nhập |
+
 ### API nội dung và cấu hình (`/api/v1`, Bước 8)
 
 | Phương thức | Đường dẫn | Việc |
@@ -277,12 +320,12 @@ thu hồi phiên tức thì qua Redis, chặn dò mật khẩu theo IP và email
 | 6. Đơn hàng | ✅ Xong |
 | 7. Khách hàng + Báo giá công trình | ✅ Xong |
 | 8. Nội dung + Cấu hình | ✅ Xong |
-| **9. Hệ thống** (tiếp theo, đề xuất) | Các mục menu còn "Sắp có": **Nhân viên** (danh sách, thêm, khóa tài khoản, đặt lại mật khẩu, phiên đăng nhập — hiện chỉ có CLI), **Nhật ký** (xem `audit_logs`, lọc theo người/hành động/đối tượng), **Giá và khuyến mãi** (bảng giá nhóm, flash sale, voucher, quà tặng — bảng đã có, chưa áp vào đơn), **Báo cáo** (doanh thu theo đơn Hoàn tất, theo kênh, nhân viên, sản phẩm) |
-| 10. Storefront | Website bán hàng: form đặt hàng ngắn gọn, endpoint công khai cho showroom, bài viết, banner đang chạy, trang tĩnh, chính sách, FAQ, đánh giá đã duyệt; ô viết đánh giá có ảnh; sitemap, schema.org (`Product`, `LocalBusiness`, `FAQPage`, `Article`), dữ liệu SEO từ `/settings` phần công khai |
-| 11. Triển khai | Máy chủ, Nginx, HTTPS, sao lưu database và `MEDIA_ROOT`, giám sát |
-| 12. Giao diện | Chỉnh giao diện CMS và storefront một lượt bằng Claude Design |
+| 9. Hệ thống (Nhân viên, Nhật ký, Báo cáo, Trang chủ, giao diện nền) | ✅ Xong — **CMS đã đủ chức năng, menu không còn mục "Sắp có"** |
+| **10. Storefront** (tiếp theo) | Website bán hàng. Phần API công khai: sản phẩm, danh mục, bài viết, trang tĩnh, chính sách, FAQ, showroom, banner đang chạy, đánh giá đã duyệt, dữ liệu SEO công khai từ `/settings`. Phần web: trang chủ, danh mục, chi tiết sản phẩm, giỏ hàng, **form đặt hàng ngắn gọn**, ô viết đánh giá có ảnh, tra cứu đơn, sitemap, `robots.txt`, schema.org (`Product`, `LocalBusiness`, `FAQPage`, `Article`, `BreadcrumbList`) |
+| 11. Nhận diện và giao diện | Chốt bảng màu, làm logo, chỉnh giao diện storefront và CMS một lượt |
+| 12. Triển khai | Máy chủ, Nginx, HTTPS, sao lưu database và `MEDIA_ROOT`, giám sát, hướng dẫn sử dụng cho nhân viên |
 
-Công ty muốn **làm xong toàn bộ CMS trước**, storefront để sau. Thứ tự Bước 9–12 là đề xuất, chốt lại khi bắt đầu.
+Công ty đã làm xong toàn bộ CMS trước, giờ mới sang storefront. Thứ tự Bước 10–12 là đề xuất, chốt lại khi bắt đầu.
 
 **Migration `orders_brand_sourcing`** (Bước 6): thêm trạng thái `ORDERED_FROM_BRAND`, `GOODS_ARRIVED`;
 cột `ship_address_raw`, `brand_order_ref`, `brand_ordered_at`, `goods_arrived_at`, `scheduled_at`,
@@ -295,7 +338,7 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Nhập ảnh hàng loạt theo tên file = SKU
 - Đổi tên thuộc tính (vd: "Màu" → "Màu sắc")
 - Màn hình khai báo thành phần combo (checklist combo đang chặn đăng bán)
-- Ô "Nhóm lắp đặt" trong form sản phẩm (làm cùng Bước 9)
+- Ô "Nhóm lắp đặt" trong form sản phẩm
 - Sửa alt text ảnh; gán lại ảnh sang biến thể khác
 - Migration thêm `product_media.media_asset_id` (FK Restrict) thay cho việc đối chiếu theo `url`
 - Cảnh báo rời trang khi còn thay đổi chưa lưu chỉ chạy lúc đóng tab/tải lại, chưa chặn khi bấm menu
@@ -309,7 +352,12 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Trang chi tiết đơn: hiện liên kết về báo giá gốc (đơn kênh Công trình có `quote_id`)
 - Tạo PDF phía máy chủ (hiện dùng "Lưu thành PDF" của trình duyệt)
 - Nhóm khách có `discount_bps` nhưng chưa áp giá theo nhóm (các lớp giá sẽ làm cùng Flash sale/voucher)
-- **Chỉnh UI/UX toàn CMS một lượt** (Dennis ghi lại/chụp màn hình chỗ xấu, khó dùng trong lúc thử)
+- Rà giao diện từng trang sau khi dùng thật: bật tiêu đề cột dính (`table-sticky`) cho bảng dài, gom bộ lọc cho gọn
+  (phần nền đã làm ở 9.5; bảng màu chờ chốt cùng storefront)
+- Chọn ảnh có sẵn từ Thư viện ảnh cho các ô ảnh (hiện chỉ có "Tải ảnh lên")
+- Nhân viên: gửi email mời đặt mật khẩu thay cho mật khẩu tạm đọc qua Zalo (cần dịch vụ gửi email)
+- Nhật ký: xuất Excel khi cần đối chiếu; tự dọn dòng quá cũ nếu bảng phình to
+- Báo cáo: tùy chọn tính doanh thu theo **ngày thu tiền** thay vì ngày hoàn tất, nếu kế toán yêu cầu
 - Nối `vat.default_rate_bps` vào tạo biến thể và nhập Excel, rồi mới đưa ô VAT lên trang Cấu hình
 - Ghi lại lần đồng ý chính sách **mới** của khách cũ (hiện chỉ ghi lần đồng ý đầu tiên) — làm cùng trang đặt hàng Bước 10
 - Xóa sản phẩm thì đánh giá bị xóa theo (Cascade) nhưng **file ảnh đánh giá còn trên ổ đĩa**
@@ -382,6 +430,11 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 - Trang có bộ lọc/tab: đặt trên URL (`?status=`, `?tab=`...) bằng `router.replace(..., { scroll: false })`, bọc `<Suspense>`
 - Trang soạn nội dung dài: `staleTime: Infinity, refetchOnWindowFocus: false` để không tự tải lại đè phần đang viết
 - File tải về trùng tên (`page.tsx`...): Claude đặt tên riêng khi gửi (`bai-viet-id-page.tsx`), lệnh `cp` đặt lại tên đúng
+- Khung ứng dụng cao đúng màn hình (`h-svh overflow-hidden`); chỉ danh sách menu và vùng nội dung được cuộn.
+  Thêm vùng cuộn mới thì khai báo rõ `overflow-y-auto`, đừng để cả trang cuộn
+- Số tiền: không cần class riêng, `tabular-nums` đã bật toàn hệ thống ở `globals.css`; cột số dùng class `cell-number`
+- Bảng dài: `<Table containerClassName="max-h-[60vh]" className="table-sticky">` để tiêu đề cột dính khi cuộn
+- Trang có tab hoặc bộ lọc: đặt trên URL để trang chủ và link chia sẻ mở đúng danh sách
 
 ## Bẫy đã gặp (đừng lặp lại)
 
@@ -422,6 +475,10 @@ CHECK địa chỉ đầy đủ chỉ áp dụng từ khi đơn đã xác nhận
 | Tên icon trong `navigation.ts` sai | `app-shell` tự thay bằng hình tròn, không báo lỗi → kiểm tra tên trên lucide.dev |
 | Link rút gọn `maps.app.goo.gl` | Không đọc được tọa độ; dán dòng tọa độ (chuột phải trên Google Maps) hoặc link đầy đủ |
 | `curl: (26) Failed to open/read local data` | File đính kèm `-F photos=@...` không tồn tại |
+| `min-h-svh` cho khung ứng dụng | Menu trái dài hơn màn hình sẽ đẩy cả trang cao lên, sinh thanh cuộn thừa và cắt mất nút cuối menu. Dùng `h-svh overflow-hidden` rồi cho từng vùng cuộn riêng |
+| Chỉ đặt `overflow-x-auto` (dải tab) | Theo chuẩn CSS, một trục `auto` thì trục kia thành `auto`, nên dư 1px là hiện thanh cuộn dọc nhỏ. `globals.css` đã khóa trục dọc cho các phần tử chỉ cuộn ngang |
+| `next/font` không đổi phông | Chỉ nạp lúc khởi động: phải tắt rồi chạy lại `pnpm dev` |
+| Xóa bản ghi có nhiều khóa ngoại `Restrict` (nhân viên) | Chỉ đăng nhập một lần là đã có dòng nhật ký nên không xóa được nữa. Quy tắc chung: **chưa từng dùng thì xóa, đã dùng thì khóa/lưu trữ** |
 | `pnpm dev` lỗi `ENOTEMPTY ... generated/prisma` | `database:build` và `database:dev` cùng chạy `prisma generate`. Đã thêm `packages/database/turbo.json` (dev phụ thuộc build) và bỏ `prisma generate` khỏi script `dev` |
 
 ## Khởi động
@@ -440,8 +497,10 @@ Xem thêm `README.md` ở thư mục gốc.
 ## Gom code cho cuộc trò chuyện mới
 
 Tạo `~/Desktop/ktm-context.txt` gồm toàn bộ code admin, shared, worker, các module API liên quan và SQL migration.
-Sửa danh sách `MODULES` theo bước sắp làm. Bước 9 (Hệ thống) cần: `auth|audit|common|settings|catalog|orders|quotes|customers|redis|config`.
-Module API hiện có: `auth audit banners catalog common config content customers database geo media orders posts quotes redis reviews settings showrooms warranty`.
+Sửa danh sách `MODULES` theo bước sắp làm. Bước 10 (Storefront) cần: `catalog|content|posts|banners|reviews|showrooms|settings|orders|customers|common|geo|media`,
+và gom thêm `apps/web/src` (hiện gần như trống) thay cho `apps/admin/src`.
+Module API hiện có: `auth audit banners catalog common config content customers database geo media orders posts quotes redis reports reviews settings showrooms staff warranty`.
+Giao diện nền (`packages/ui`, CSS, cấu hình Tailwind) KHÔNG nằm trong lệnh này; cần thì gom riêng (xem `ktm-ui.txt` ở Bước 9.5).
 File `vn-admin-units.ts` (3.321 phường-xã) bị bỏ ra vì rất nặng.
 
 ```bash

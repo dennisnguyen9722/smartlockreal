@@ -17,5 +17,8 @@ export * from './schemas/post';
 export * from './schemas/banner';
 export * from './schemas/content';
 export * from './schemas/review';
+export * from './schemas/staff';
+export * from './schemas/audit';
+export * from './schemas/report';
 export * from './settings';
 export * from './navigation';

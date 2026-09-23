@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import {
@@ -56,11 +57,22 @@ const STATUS_BADGE: Partial<Record<QuoteStatusValue, 'default' | 'secondary' | '
 };
 
 export default function QuoteListPage() {
+    // useSearchParams cần Suspense bao ngoài, nếu không Next.js báo lỗi khi build
+    return (
+        <Suspense fallback={<LoadingRows rows={6} />}>
+            <QuoteListPageContent />
+        </Suspense>
+    );
+}
+
+function QuoteListPageContent() {
+    // Trang Tổng quan dẫn sang đây kèm bộ lọc sẵn, vd /don-hang?status=PENDING_CONFIRMATION&mine=true
+    const searchParams = useSearchParams();
     const { can } = useAuth();
     const [searchInput, setSearchInput] = useState('');
     const search = useDebounced(searchInput.trim());
-    const [status, setStatus] = useState<QuoteListStatus>('OPEN');
-    const [mine, setMine] = useState(false);
+    const [status, setStatus] = useState<QuoteListStatus>((searchParams.get('status') as QuoteListStatus | null) ?? 'OPEN');
+    const [mine, setMine] = useState(searchParams.get('mine') === 'true');
     const [page, setPage] = useState(1);
 
     const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE), status });

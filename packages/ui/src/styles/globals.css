@@ -52,6 +52,8 @@
 }
 
 @theme inline {
+    /* Be Vietnam Pro nạp ở apps/admin/src/app/layout.tsx; dự phòng là phông hệ thống */
+    --font-sans: var(--font-be-vietnam-pro), ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);
@@ -78,10 +80,78 @@
 
 @layer base {
     * {
-        @apply border-border outline-ring/50;
+        @apply border-border;
     }
 
     body {
-        @apply bg-background text-foreground;
+        @apply bg-background text-foreground font-sans;
+        /* Chữ số cùng bề rộng: các cột tiền trong bảng thẳng hàng, dễ so sánh */
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Viền khi di chuyển bằng bàn phím: rõ để nhân viên nhập liệu bằng Tab không bị lạc */
+    :focus-visible {
+        @apply outline-ring outline-2 outline-offset-2;
+    }
+
+    /* Tiêu đề nhập liệu và nhãn không dùng CHỮ HOA TOÀN BỘ: tiếng Việt có dấu đọc khó khi viết hoa */
+    h1,
+    h2,
+    h3 {
+        @apply text-balance;
+    }
+
+    /*
+     * Dải tab (Tất cả / Nháp / ...) dùng overflow-x-auto để kéo ngang được trên màn hình hẹp.
+     * Theo chuẩn CSS, đặt auto cho MỘT trục thì trục còn lại đang "visible" tự thành "auto",
+     * nên dải tab cao hơn khung 1px (gạch chân của tab đang chọn) là sinh thanh cuộn dọc thừa.
+     * Khóa trục dọc lại; chỗ nào thật sự cần cuộn dọc thì khai báo rõ overflow-y-auto / overflow-auto.
+     */
+    .overflow-x-auto:not(.overflow-y-auto):not(.overflow-auto) {
+        overflow-y: hidden;
+    }
+
+    /* Máy tính bàn: thanh cuộn mảnh, đỡ chiếm chỗ trong bảng dài */
+    @media (pointer: fine) {
+        * {
+            scrollbar-width: thin;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+}
+
+@layer components {
+
+    /* Ô số tiền, số lượng: căn phải để so sánh nhanh theo cột */
+    .cell-number {
+        @apply text-right whitespace-nowrap;
+    }
+
+    /*
+     * Bảng dài: tiêu đề cột dính lại khi cuộn.
+     * Dùng cùng <Table containerClassName="max-h-[60vh]"> để vùng cuộn nằm trong bảng.
+     */
+    .table-sticky thead th {
+        @apply sticky top-0 z-10 bg-card;
+        box-shadow: inset 0 -1px 0 var(--border);
+    }
+}
+
+@layer utilities {
+
+    /* Trang in (báo giá): bỏ nền và bóng để tiết kiệm mực */
+    @media print {
+        body {
+            background: #fff;
+        }
     }
 }

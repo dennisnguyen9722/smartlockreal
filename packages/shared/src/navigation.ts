@@ -23,6 +23,8 @@ export interface NavGroup {
  *
  * Không có nhóm Kho và Dịch vụ: công ty không giữ kho, lắp đặt và bảo hành do hãng làm
  * (quyết định ở Bước 6). Công ty chỉ TRA CỨU bảo hành (đơn, serial, ngày giao) để báo hãng.
+ * Không có Giá và khuyến mãi (chốt ở Bước 9): giá sau chiết khấu nhập thẳng vào giá niêm yết,
+ * giảm giá hiển thị bằng giá gạch ngang (compareAtPrice).
  */
 export const ADMIN_NAV: NavGroup[] = [
   {
@@ -58,11 +60,10 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Hệ thống',
     items: [
-      { label: 'Giá và khuyến mãi', href: '/gia-khuyen-mai', icon: 'Tags', permission: 'pricing.view' },
-      { label: 'Báo cáo', href: '/bao-cao', icon: 'ChartColumn', permission: 'report.view' },
-      { label: 'Nhân viên', href: '/nhan-vien', icon: 'UserCog', permission: 'staff.manage' },
+      { label: 'Báo cáo', href: '/bao-cao', icon: 'ChartColumn', permission: 'report.view', ready: true },
+      { label: 'Nhân viên', href: '/nhan-vien', icon: 'UserCog', permission: 'staff.manage', ready: true },
       { label: 'Cấu hình', href: '/cau-hinh', icon: 'Settings', permission: 'setting.manage', ready: true },
-      { label: 'Nhật ký', href: '/nhat-ky', icon: 'ScrollText', permission: 'audit.view' },
+      { label: 'Nhật ký', href: '/nhat-ky', icon: 'ScrollText', permission: 'audit.view', ready: true },
     ],
   },
 ];

@@ -28,6 +28,8 @@ import { PostsModule } from './posts/posts.module';
 import { BannersModule } from './banners/banners.module';
 import { ContentModule } from './content/content.module';
 import { ReviewsModule } from './reviews/reviews.module';
+import { StaffModule } from './staff/staff.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({})
 export class AppModule {
@@ -56,6 +58,8 @@ export class AppModule {
         BannersModule,
         ContentModule,
         ReviewsModule,
+        StaffModule,
+        ReportsModule,
       ],
       controllers: [
         HealthController,
