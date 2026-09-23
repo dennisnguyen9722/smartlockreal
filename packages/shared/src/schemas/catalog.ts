@@ -7,8 +7,19 @@ export const SlugSchema = z
   .max(160)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Slug chỉ gồm chữ thường, số và dấu gạch ngang');
 
+/** Ảnh lưu theo url (như product_media): xóa ảnh ở Thư viện ảnh phải kiểm tra cột này */
+const BrandLogoSchema = z
+  .string()
+  .trim()
+  .max(500, 'Đường dẫn quá dài')
+  .refine((value) => value === '' || value.startsWith('/') || /^https?:\/\//.test(value), 'Đường dẫn ảnh không hợp lệ')
+  .transform((value) => (value === '' ? null : value))
+  .nullable();
+
 export const BrandCreateSchema = z.object({
   name: z.string().trim().min(1, 'Chưa nhập tên hãng').max(120),
+  /** Logo hãng, hiện ở danh sách sản phẩm và trang hãng trên website */
+  logoUrl: BrandLogoSchema.optional(),
   /** Bỏ trống thì hệ thống tự tạo từ tên */
   slug: SlugSchema.optional(),
   description: z.string().max(5000).optional(),

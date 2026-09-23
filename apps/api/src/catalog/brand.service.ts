@@ -61,6 +61,7 @@ export class BrandService {
         data: {
           name: input.name,
           slug,
+          logoUrl: input.logoUrl ?? null,
           description: input.description,
           countryOfOrigin: input.countryOfOrigin,
           isAuthorized: input.isAuthorized ?? false,

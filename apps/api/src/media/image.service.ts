@@ -140,12 +140,14 @@ export class ImageService {
 
     // Ảnh sản phẩm, ảnh showroom và ảnh ở trang Cấu hình lưu theo url (không có khóa ngoại tới media_assets),
     // nên phải đếm riêng
-    const [productUsage, settingUsage, showroomUsage, postContentUsage] = await Promise.all([
+    const [productUsage, settingUsage, showroomUsage, postContentUsage, brandUsage] = await Promise.all([
       this.db.productMedia.count({ where: { url: asset.url } }),
       this.db.systemSetting.count({ where: { key: { in: IMAGE_SETTING_KEYS }, value: { equals: asset.url } } }),
       this.db.location.count({ where: { imageUrls: { has: asset.url } } }),
       // Ảnh chèn trong nội dung bài viết (ảnh bìa đã có khóa ngoại, đếm ở postCovers)
       this.db.post.count({ where: { contentHtml: { contains: asset.url } } }),
+      // Logo hãng cũng lưu theo url
+      this.db.brand.count({ where: { logoUrl: asset.url } }),
     ]);
     const used =
       asset._count.postCovers +
@@ -154,7 +156,8 @@ export class ImageService {
       productUsage +
       settingUsage +
       showroomUsage +
-      postContentUsage;
+      postContentUsage +
+      brandUsage;
     if (used > 0) {
       throw new AppException(ErrorCode.IN_USE, HttpStatus.CONFLICT, {
         references: used,
@@ -164,6 +167,8 @@ export class ImageService {
             ? `Ảnh đang dùng cho ${productUsage} sản phẩm/biến thể. Gỡ khỏi sản phẩm trước khi xóa.`
             : settingUsage > 0
               ? 'Ảnh đang dùng làm logo hoặc ảnh chia sẻ ở trang Cấu hình. Đổi ảnh khác ở đó trước khi xóa.'
+              : brandUsage > 0
+              ? `Ảnh đang làm logo của ${brandUsage} hãng. Đổi logo khác trước khi xóa.`
               : showroomUsage > 0
                 ? `Ảnh đang dùng cho ${showroomUsage} showroom. Gỡ khỏi showroom trước khi xóa.`
                 : postContentUsage > 0 || asset._count.postCovers > 0

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ImageIcon, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { BrandCreateSchema, type Paginated } from '@ktm/shared';
+import { BrandCreateSchema, imageUrl, type Paginated } from '@ktm/shared';
 import { Badge } from '@ktm/ui/components/badge';
 import { Button } from '@ktm/ui/components/button';
 import {
@@ -30,11 +30,13 @@ import { useAuth } from '@/components/auth-provider';
 import { ApiError } from '@/lib/api';
 import { useApiMutation, useApiQuery } from '@/lib/hooks';
 import { SlugField } from '@/components/slug-field';
+import { BrandLogoField } from '@/components/catalog/brand-logo-field';
 
 interface Brand {
   id: string;
   name: string;
   slug: string;
+  logoUrl: string | null;
   countryOfOrigin: string | null;
   isAuthorized: boolean;
   authorizationExpiresAt: string | null;
@@ -46,6 +48,7 @@ interface Brand {
 const EMPTY_FORM = {
   name: '',
   slug: '',
+  logoUrl: '',
   countryOfOrigin: '',
   isAuthorized: false,
   authorizationExpiresAt: '',
@@ -78,6 +81,8 @@ export default function BrandPage() {
         name: values.name.trim(),
         isAuthorized: values.isAuthorized,
         sortOrder: values.sortOrder,
+        // Gỡ logo thì gửi null để API xóa giá trị cũ
+        logoUrl: values.logoUrl.trim() || null,
       };
       if (values.slug.trim()) body.slug = values.slug.trim();
       if (values.countryOfOrigin.trim()) body.countryOfOrigin = values.countryOfOrigin.trim();
@@ -138,6 +143,7 @@ export default function BrandPage() {
     setForm({
       name: brand.name,
       slug: brand.slug,
+      logoUrl: brand.logoUrl ?? '',
       countryOfOrigin: brand.countryOfOrigin ?? '',
       isAuthorized: brand.isAuthorized,
       authorizationExpiresAt: brand.authorizationExpiresAt?.slice(0, 10) ?? '',
@@ -152,6 +158,7 @@ export default function BrandPage() {
     const parsed = BrandCreateSchema.safeParse({
       name: form.name.trim(),
       ...(form.slug.trim() ? { slug: form.slug.trim() } : {}),
+      logoUrl: form.logoUrl.trim(),
     });
     if (!parsed.success) {
       const errors: Record<string, string> = {};
@@ -211,6 +218,7 @@ export default function BrandPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Logo</TableHead>
                 <TableHead>Tên hãng</TableHead>
                 <TableHead>Đường dẫn</TableHead>
                 <TableHead>Xuất xứ</TableHead>
@@ -225,6 +233,20 @@ export default function BrandPage() {
             <TableBody>
               {brands.map((brand) => (
                 <TableRow key={brand.id}>
+                  <TableCell>
+                    <div className="flex size-10 items-center justify-center overflow-hidden rounded border bg-muted">
+                      {brand.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- ảnh đã được server tối ưu sẵn
+                        <img
+                          src={brand.logoUrl.endsWith('.webp') ? imageUrl(brand.logoUrl, 'sm') : brand.logoUrl}
+                          alt=""
+                          className="size-full object-contain p-1"
+                        />
+                      ) : (
+                        <ImageIcon className="size-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium">{brand.name}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{brand.slug}</TableCell>
                   <TableCell>{brand.countryOfOrigin ?? '—'}</TableCell>
@@ -293,6 +315,14 @@ export default function BrandPage() {
               isEditing={editing !== null}
               error={fieldErrors.slug}
             />
+
+            <Field label="Logo hãng" error={fieldErrors.logoUrl}>
+              <BrandLogoField
+                value={form.logoUrl}
+                onChange={(logoUrl) => setForm({ ...form, logoUrl })}
+                disabled={save.isPending}
+              />
+            </Field>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Xuất xứ">
