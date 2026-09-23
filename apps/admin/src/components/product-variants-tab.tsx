@@ -196,7 +196,7 @@ export function ProductVariantsTab({
 
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-2">
-                    <CardTitle>Biến thể sản phẩm</CardTitle>
+                    <CardTitle>Giá và phiên bản</CardTitle>
                     {canManage && product.status !== 'ARCHIVED' && (
                         <Button variant="outline" onClick={() => setAdding(true)}>
                             <Plus className="size-4" />
@@ -389,7 +389,7 @@ export function ProductVariantsTab({
                     })}
 
                     <p className="pt-1 text-xs text-muted-foreground">
-                        Giá chưa gồm VAT. Biến thể đã có đơn hàng, báo giá, tồn kho hoặc nằm trong khuyến mãi/combo thì
+                        Giá chưa gồm VAT. Phiên bản đã có đơn hàng, báo giá, tồn kho hoặc nằm trong khuyến mãi/combo thì
                         không xóa được, chỉ tắt. Tồn kho theo showroom quản lý ở mục Kho.
                     </p>
                 </CardContent>
@@ -436,7 +436,7 @@ export function ProductVariantsTab({
                 title="Xóa biến thể?"
                 description={
                     <>
-                        Xóa hẳn <strong>{deleting?.name}</strong> ({deleting?.sku}). Biến thể này chưa có giao dịch nào
+                        Xóa hẳn <strong>{deleting?.name}</strong> ({deleting?.sku}). Phiên bản này chưa có giao dịch nào
                         nên xóa an toàn.
                     </>
                 }

@@ -21,7 +21,7 @@ import type { ProductDetail } from '@/lib/product-types';
 
 const TABS = [
   { key: 'info', label: 'Thông tin' },
-  { key: 'variants', label: 'Biến thể' },
+  { key: 'variants', label: 'Giá và phiên bản' },
   { key: 'media', label: 'Ảnh' },
 ] as const;
 

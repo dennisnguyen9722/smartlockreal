@@ -20,21 +20,22 @@ import {
   type ProductInfoDraft,
 } from '@/lib/product-form';
 
-const EMPTY_VARIANT: VariantDraft = {
-  key: '',
-  optionValues: {},
-  name: 'Mặc định',
-  sku: '',
-  price: '',
-  compareAtPrice: '',
-};
+/** Giá của sản phẩm; phiên bản nào không nhập giá riêng thì dùng các giá trị này */
+interface BasePrice {
+  price: string;
+  compareAtPrice: string;
+  sku: string;
+}
+
+const EMPTY_BASE: BasePrice = { price: '', compareAtPrice: '', sku: '' };
 
 export default function NewProductPage() {
   const router = useRouter();
 
   const [info, setInfo] = useState<ProductInfoDraft>(EMPTY_INFO_DRAFT);
   const [options, setOptions] = useState<OptionDraft[]>([]);
-  const [variants, setVariants] = useState<VariantDraft[]>([EMPTY_VARIANT]);
+  const [base, setBase] = useState<BasePrice>(EMPTY_BASE);
+  const [variants, setVariants] = useState<VariantDraft[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   /** Payload đầy đủ; dùng cho cả kiểm tra trước lẫn gửi đi */
@@ -48,14 +49,30 @@ export default function NewProductPage() {
           name: option.name.trim(),
           values: option.values.filter((value) => value.code),
         })),
-      variants: variants.map((variant, index) => ({
-        name: variant.name.trim(),
-        price: Number(variant.price) || 0,
-        ...(variant.sku.trim() ? { sku: variant.sku.trim() } : {}),
-        ...(variant.compareAtPrice ? { compareAtPrice: Number(variant.compareAtPrice) } : {}),
-        ...(Object.keys(variant.optionValues).length > 0 ? { optionValues: variant.optionValues } : {}),
-        sortOrder: index,
-      })),
+      // Không có tùy chọn: một phiên bản "Mặc định" giữ giá của sản phẩm.
+      // Có tùy chọn: phiên bản bỏ trống giá thì lấy giá chung, nhập riêng thì dùng giá riêng.
+      variants:
+        variants.length === 0
+          ? [
+              {
+                name: 'Mặc định',
+                price: Number(base.price) || 0,
+                ...(base.sku.trim() ? { sku: base.sku.trim() } : {}),
+                ...(base.compareAtPrice ? { compareAtPrice: Number(base.compareAtPrice) } : {}),
+                sortOrder: 0,
+              },
+            ]
+          : variants.map((variant, index) => {
+              const compareAt = variant.compareAtPrice || base.compareAtPrice;
+              return {
+                name: variant.name.trim(),
+                price: Number(variant.price || base.price) || 0,
+                ...(variant.sku.trim() ? { sku: variant.sku.trim() } : {}),
+                ...(compareAt ? { compareAtPrice: Number(compareAt) } : {}),
+                ...(Object.keys(variant.optionValues).length > 0 ? { optionValues: variant.optionValues } : {}),
+                sortOrder: index,
+              };
+            }),
     };
   }
 
@@ -114,14 +131,18 @@ export default function NewProductPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Tùy chọn và biến thể</CardTitle>
+            <CardTitle>Giá bán</CardTitle>
           </CardHeader>
           <CardContent>
             <VariantBuilder
+              basePrice={base.price}
+              baseCompareAtPrice={base.compareAtPrice}
+              baseSku={base.sku}
+              onBaseChange={(patch) => setBase({ ...base, ...patch })}
               options={options}
               variants={variants}
               onOptionsChange={setOptions}
-              onVariantsChange={(next) => setVariants(next.length > 0 ? next : [EMPTY_VARIANT])}
+              onVariantsChange={setVariants}
               errors={errors}
             />
           </CardContent>
