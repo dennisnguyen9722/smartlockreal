@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@ktm/database';
 import {
   SALES_CHANNEL_LABEL,
-  auditActionLabel,
   roleHasPermission,
   type DashboardResponse,
   type DashboardTask,
@@ -121,7 +120,6 @@ export class ReportService {
   async dashboard(staffId: string, role: StaffRoleCode): Promise<DashboardResponse> {
     const canSeeMoney = roleHasPermission(role, 'report.view');
     const canModerateReviews = roleHasPermission(role, 'review.moderate');
-    const canSeeActivity = roleHasPermission(role, 'audit.view');
     // Nhân viên kinh doanh: chỉ việc của mình; link sang danh sách cũng thêm mine=true
     const mineOnly = !canSeeMoney;
     const mineOrder = mineOnly ? { assignedStaffId: staffId } : {};
@@ -159,11 +157,11 @@ export class ReportService {
       tasks.push({ key: 'reviews.pending', label: 'Đánh giá chờ duyệt', count: reviews, href: '/danh-gia?status=PENDING', urgent: false });
     }
 
-    const money = canSeeMoney
-      ? await this.dashboardMoney(todayStart, tomorrow, monthStart, previousMonthStart, seriesStart)
-      : null;
-    const recentActivity = canSeeActivity ? await this.recentActivity() : null;
-    return { tasks, money, recentActivity };
+    const [money, catalog] = await Promise.all([
+      canSeeMoney ? this.dashboardMoney(todayStart, tomorrow, monthStart, previousMonthStart, seriesStart) : Promise.resolve(null),
+      this.catalogSummary(),
+    ]);
+    return { tasks, money, catalog };
   }
 
   // ================= Nội bộ =================
@@ -247,22 +245,19 @@ export class ReportService {
     return { todayRevenue, monthRevenue, previousMonthRevenue, series };
   }
 
-  /** Vài dòng nhật ký mới nhất cho trang chủ (quản trị) */
-  private async recentActivity() {
-    const rows = await this.db.auditLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: { id: true, action: true, entityType: true, entityId: true, createdAt: true, staff: { select: { fullName: true } } },
-    });
-    return rows.map((row) => ({
-      id: row.id,
-      action: auditActionLabel(row.action),
-      entityType: row.entityType,
-      entityId: row.entityId,
-      entityName: null,
-      staffName: row.staff?.fullName ?? null,
-      createdAt: row.createdAt.toISOString(),
-    }));
+  /** Tổng quan hàng hóa và nội dung; không có số tiền nên nhân viên nào cũng xem được */
+  private async catalogSummary() {
+    const [activeProducts, draftProducts, archivedProducts, productsWithoutImage, categories, brands, publishedPosts] = await Promise.all([
+      this.db.product.count({ where: { status: 'ACTIVE' } }),
+      this.db.product.count({ where: { status: 'DRAFT' } }),
+      this.db.product.count({ where: { status: 'ARCHIVED' } }),
+      // Đang bán mà chưa có ảnh nào: website sẽ hiện ô trống
+      this.db.product.count({ where: { status: 'ACTIVE', media: { none: {} } } }),
+      this.db.category.count(),
+      this.db.brand.count(),
+      this.db.post.count({ where: { status: 'PUBLISHED', publishedAt: { lte: new Date() } } }),
+    ]);
+    return { activeProducts, draftProducts, archivedProducts, productsWithoutImage, categories, brands, publishedPosts };
   }
 
   private async staffNames(ids: string[]): Promise<Map<string, string>> {

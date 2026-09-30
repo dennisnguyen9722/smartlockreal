@@ -1,14 +1,9 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowRight, TrendingDown, TrendingUp } from 'lucide-react';
-import {
-    AUDIT_ENTITY_LABEL,
-    auditEntityHref,
-    formatVnd,
-    percentChange,
-    type DashboardResponse,
-} from '@ktm/shared';
+import { ArrowRight, FolderTree, ImageOff, Newspaper, Package, Plus, Tag, TrendingDown, TrendingUp } from 'lucide-react';
+import { formatVnd, percentChange, type DashboardResponse } from '@ktm/shared';
 import { Button } from '@ktm/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@ktm/ui/components/card';
 import { cn } from '@ktm/ui/lib/utils';
@@ -17,7 +12,6 @@ import { ErrorState, LoadingRows } from '@/components/data-states';
 import { PageHeader } from '@/components/page-header';
 import { RevenueChart } from '@/components/report/revenue-chart';
 import { useApiQuery } from '@/lib/hooks';
-import { formatDateTimeVn } from '@/lib/order-types';
 
 export default function DashboardPage() {
     const { staff, can } = useAuth();
@@ -102,50 +96,118 @@ export default function DashboardPage() {
                         </section>
                     )}
 
-                    {/* Hoạt động gần đây: chỉ người xem được nhật ký */}
-                    {query.data.recentActivity && query.data.recentActivity.length > 0 && (
-                        <section className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-sm font-medium text-muted-foreground">Hoạt động gần đây</h2>
-                                <Link href="/nhat-ky">
-                                    <Button variant="ghost" size="sm">
-                                        Xem nhật ký
-                                        <ArrowRight className="size-4" />
+                    {/* Hàng hóa: số liệu ai cũng xem được, kèm nút thêm nhanh */}
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-medium text-muted-foreground">Hàng hóa và nội dung</h2>
+                            {can('catalog.manage') && (
+                                <Link href="/san-pham/moi">
+                                    <Button size="sm">
+                                        <Plus className="size-4" />
+                                        Thêm sản phẩm
                                     </Button>
                                 </Link>
+                            )}
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <CatalogCard
+                                href="/san-pham?status=ACTIVE"
+                                icon={<Package className="size-4" />}
+                                label="Sản phẩm đang bán"
+                                value={query.data.catalog.activeProducts}
+                                hint={`${query.data.catalog.draftProducts} nháp · ${query.data.catalog.archivedProducts} lưu trữ`}
+                            />
+                            <CatalogCard
+                                href="/san-pham?status=ACTIVE"
+                                icon={<ImageOff className="size-4" />}
+                                label="Đang bán nhưng thiếu ảnh"
+                                value={query.data.catalog.productsWithoutImage}
+                                hint={query.data.catalog.productsWithoutImage > 0 ? 'Website đang hiện ô trống, nên bổ sung' : 'Sản phẩm nào cũng có ảnh'}
+                                urgent={query.data.catalog.productsWithoutImage > 0}
+                            />
+                            <CatalogCard
+                                href="/danh-muc"
+                                icon={<FolderTree className="size-4" />}
+                                label="Danh mục"
+                                value={query.data.catalog.categories}
+                                hint={`${query.data.catalog.brands} hãng`}
+                            />
+                            <CatalogCard
+                                href="/bai-viet?status=PUBLISHED"
+                                icon={<Newspaper className="size-4" />}
+                                label="Bài viết đã đăng"
+                                value={query.data.catalog.publishedPosts}
+                                hint="Bài viết kéo khách từ Google"
+                            />
+                        </div>
+
+                        {can('catalog.manage') && (
+                            <div className="flex flex-wrap gap-2">
+                                <Link href="/danh-muc">
+                                    <Button variant="outline" size="sm">
+                                        <FolderTree className="size-4" />
+                                        Thêm danh mục
+                                    </Button>
+                                </Link>
+                                <Link href="/hang">
+                                    <Button variant="outline" size="sm">
+                                        <Tag className="size-4" />
+                                        Thêm hãng
+                                    </Button>
+                                </Link>
+                                <Link href="/san-pham/nhap-excel">
+                                    <Button variant="outline" size="sm">
+                                        <Package className="size-4" />
+                                        Nhập sản phẩm từ Excel
+                                    </Button>
+                                </Link>
+                                {can('content.manage') && (
+                                    <Link href="/bai-viet/moi">
+                                        <Button variant="outline" size="sm">
+                                            <Newspaper className="size-4" />
+                                            Viết bài
+                                        </Button>
+                                    </Link>
+                                )}
                             </div>
-                            <Card>
-                                <CardContent className="divide-y p-0">
-                                    {query.data.recentActivity.map((item) => {
-                                        const href = auditEntityHref(item.entityType, item.entityId);
-                                        return (
-                                            <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 text-sm">
-                                                <span className="min-w-0 flex-1">
-                                                    <span className="font-medium">{item.action}</span>{' '}
-                                                    <span className="text-muted-foreground">
-                                                        {AUDIT_ENTITY_LABEL[item.entityType] ?? item.entityType}
-                                                    </span>
-                                                    {href && (
-                                                        <>
-                                                            {' · '}
-                                                            <Link href={href} className="text-primary hover:underline">
-                                                                mở
-                                                            </Link>
-                                                        </>
-                                                    )}
-                                                </span>
-                                                <span className="text-muted-foreground">{item.staffName ?? 'Không rõ người'}</span>
-                                                <span className="whitespace-nowrap text-muted-foreground">{formatDateTimeVn(item.createdAt)}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </CardContent>
-                            </Card>
-                        </section>
-                    )}
+                        )}
+                    </section>
                 </div>
             )}
         </>
+    );
+}
+
+/** Ô số của khối hàng hóa; bấm vào mở đúng danh sách */
+function CatalogCard({
+    href,
+    icon,
+    label,
+    value,
+    hint,
+    urgent,
+}: {
+    href: string;
+    icon: ReactNode;
+    label: string;
+    value: number;
+    hint?: string;
+    urgent?: boolean;
+}) {
+    return (
+        <Link href={href}>
+            <Card className={cn('h-full transition-colors hover:border-primary', urgent && 'border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20')}>
+                <CardContent className="space-y-1 p-4">
+                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        {icon}
+                        {label}
+                    </p>
+                    <p className={cn('text-3xl font-semibold', urgent && 'text-amber-700 dark:text-amber-400')}>{value}</p>
+                    {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+                </CardContent>
+            </Card>
+        </Link>
     );
 }
 

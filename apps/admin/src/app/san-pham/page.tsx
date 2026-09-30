@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { FileSpreadsheet, Filter, ImageIcon, Plus, Search, X } from 'lucide-react';
 import {
@@ -74,6 +75,17 @@ const STATUS_TABS: { value: ProductListStatus; label: string }[] = [
 ];
 
 export default function ProductListPage() {
+  // useSearchParams cần Suspense bao ngoài, nếu không Next.js báo lỗi khi build
+  return (
+    <Suspense fallback={<LoadingRows rows={6} />}>
+      <ProductListContent />
+    </Suspense>
+  );
+}
+
+function ProductListContent() {
+  // Trang Tổng quan dẫn sang đây kèm bộ lọc sẵn, vd /san-pham?status=ACTIVE
+  const searchParams = useSearchParams();
   const { can } = useAuth();
   const canManage = can('catalog.manage');
 
@@ -81,7 +93,7 @@ export default function ProductListPage() {
   const search = useDebounced(searchInput);
   const [page, setPage] = useState(1);
   const [type, setType] = useState('');
-  const [status, setStatus] = useState<ProductListStatus>('ALL');
+  const [status, setStatus] = useState<ProductListStatus>((searchParams.get('status') as ProductListStatus | null) ?? 'ALL');
   const [brandId, setBrandId] = useState('');
   const [categoryId, setCategoryId] = useState('');
 

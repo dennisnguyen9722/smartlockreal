@@ -154,16 +154,15 @@ export interface DashboardResponse {
     /** 30 ngày gần nhất, để vẽ biểu đồ nhỏ */
     series: ReportPoint[];
   } | null;
-  /** Chỉ người có quyền audit.view */
-  recentActivity:
-    | {
-        id: string;
-        action: string;
-        entityType: string;
-        entityId: string | null;
-        entityName: string | null;
-        staffName: string | null;
-        createdAt: string;
-      }[]
-    | null;
+  /** Tổng quan danh mục hàng hóa: ai cũng xem được (không phải số tiền) */
+  catalog: {
+    activeProducts: number;
+    draftProducts: number;
+    archivedProducts: number;
+    /** Sản phẩm đang bán nhưng chưa có ảnh nào: website hiện ô trống nên cần bổ sung */
+    productsWithoutImage: number;
+    categories: number;
+    brands: number;
+    publishedPosts: number;
+  };
 }

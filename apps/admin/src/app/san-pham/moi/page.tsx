@@ -10,7 +10,8 @@ import { Button } from '@ktm/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@ktm/ui/components/card';
 import { PageHeader } from '@/components/page-header';
 import { ProductInfoForm } from '@/components/product-info-form';
-import { VariantBuilder, type OptionDraft, type VariantDraft } from '@/components/variant-builder';
+import { VariantBuilder, type VersionDraft } from '@/components/variant-builder';
+import { slugifyVi } from '@ktm/shared';
 import { useApiMutation } from '@/lib/hooks';
 import {
   apiFieldErrors,
@@ -29,30 +30,51 @@ interface BasePrice {
 
 const EMPTY_BASE: BasePrice = { price: '', compareAtPrice: '', sku: '' };
 
+/** Mã chưa dùng trong danh sách: "den" -> "den-2" (mã nội bộ, không đổi sau khi lưu) */
+function uniqueCode(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${base}-${index}`;
+    if (!taken.includes(candidate)) return candidate;
+  }
+  return `${base}-${Date.now()}`;
+}
+
 export default function NewProductPage() {
   const router = useRouter();
 
   const [info, setInfo] = useState<ProductInfoDraft>(EMPTY_INFO_DRAFT);
-  const [options, setOptions] = useState<OptionDraft[]>([]);
   const [base, setBase] = useState<BasePrice>(EMPTY_BASE);
-  const [variants, setVariants] = useState<VariantDraft[]>([]);
+  const [groupName, setGroupName] = useState('Màu sắc');
+  const [versions, setVersions] = useState<VersionDraft[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  /** Payload đầy đủ; dùng cho cả kiểm tra trước lẫn gửi đi */
+  /**
+   * Payload đầy đủ; dùng cho cả kiểm tra trước lẫn gửi đi.
+   * Màn hình chỉ có "giá sản phẩm" và danh sách phiên bản; ở đây dựng lại đúng cấu trúc API cần:
+   * một tùy chọn (vd Màu sắc) và các phiên bản gắn giá trị của tùy chọn đó.
+   */
   function buildPayload(): Record<string, unknown> {
+    const filled = versions.filter((version) => version.value.trim());
+    const group = groupName.trim() || 'Phiên bản';
+    const groupCode = slugifyVi(group) || 'phien-ban';
+
+    // Mã giá trị phải duy nhất: "Đen" và "Đen nhám" lúc gõ dở đều ra mã "den"
+    const codes: string[] = [];
+    const rows = filled.map((version) => {
+      const code = uniqueCode(slugifyVi(version.value) || 'gt', codes);
+      codes.push(code);
+      return { code, version };
+    });
+
     return {
       ...buildCreateInfo(info),
-      options: options
-        .filter((option) => option.code && option.values.some((value) => value.code))
-        .map((option) => ({
-          code: option.code,
-          name: option.name.trim(),
-          values: option.values.filter((value) => value.code),
-        })),
-      // Không có tùy chọn: một phiên bản "Mặc định" giữ giá của sản phẩm.
-      // Có tùy chọn: phiên bản bỏ trống giá thì lấy giá chung, nhập riêng thì dùng giá riêng.
+      options:
+        rows.length > 0
+          ? [{ code: groupCode, name: group, values: rows.map((row) => ({ code: row.code, value: row.version.value.trim() })) }]
+          : [],
       variants:
-        variants.length === 0
+        rows.length === 0
           ? [
               {
                 name: 'Mặc định',
@@ -62,14 +84,15 @@ export default function NewProductPage() {
                 sortOrder: 0,
               },
             ]
-          : variants.map((variant, index) => {
-              const compareAt = variant.compareAtPrice || base.compareAtPrice;
+          : rows.map(({ code, version }, index) => {
+              const compareAt = version.compareAtPrice || base.compareAtPrice;
               return {
-                name: variant.name.trim(),
-                price: Number(variant.price || base.price) || 0,
-                ...(variant.sku.trim() ? { sku: variant.sku.trim() } : {}),
+                name: version.value.trim(),
+                // Phiên bản bỏ trống giá thì bán theo giá chung của sản phẩm
+                price: Number(version.price || base.price) || 0,
+                ...(version.sku.trim() ? { sku: version.sku.trim() } : {}),
                 ...(compareAt ? { compareAtPrice: Number(compareAt) } : {}),
-                ...(Object.keys(variant.optionValues).length > 0 ? { optionValues: variant.optionValues } : {}),
+                optionValues: { [groupCode]: code },
                 sortOrder: index,
               };
             }),
@@ -97,6 +120,14 @@ export default function NewProductPage() {
   );
 
   function submit() {
+    // Phiên bản đã thêm thì phải có tên, nếu không website không biết hiện gì cho khách chọn
+    const missing = versions.findIndex((version) => !version.value.trim());
+    if (missing >= 0) {
+      setErrors({ [`versions.${missing}.value`]: 'Nhập tên phiên bản, hoặc xóa dòng này' });
+      toast.error('Vui lòng kiểm tra các ô báo đỏ');
+      return;
+    }
+
     const payload = buildPayload();
 
     // Kiểm tra trước bằng chính schema của API
@@ -139,10 +170,10 @@ export default function NewProductPage() {
               baseCompareAtPrice={base.compareAtPrice}
               baseSku={base.sku}
               onBaseChange={(patch) => setBase({ ...base, ...patch })}
-              options={options}
-              variants={variants}
-              onOptionsChange={setOptions}
-              onVariantsChange={setVariants}
+              groupName={groupName}
+              onGroupNameChange={setGroupName}
+              versions={versions}
+              onVersionsChange={setVersions}
               errors={errors}
             />
           </CardContent>
