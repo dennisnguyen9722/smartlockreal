@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BrandService } from './brand.service';
 import { CategoryService } from './category.service';
+import { DoorTypeService } from './door-type.service';
 import { ProductMediaService } from './product-media.service';
 import { ProductOptionService } from './product-option.service';
 import { ProductService } from './product.service';
@@ -10,6 +11,7 @@ import { ImportParserService } from './import/parser.service';
 import { ImportService } from './import/import.service';
 import { ImportTemplateService } from './import/template.service';
 import { BrandController, CategoryController } from './catalog.controller';
+import { DoorTypeController } from './door-type.controller';
 import { ProductController } from './product.controller';
 import { ImportController } from './import/import.controller';
 
@@ -17,6 +19,7 @@ import { ImportController } from './import/import.controller';
 const services = [
   BrandService,
   CategoryService,
+  DoorTypeService,
   SpecDefinitionService,
   ProductService,
   VariantService,
@@ -28,7 +31,13 @@ const services = [
 ];
 
 @Module({
-  controllers: [BrandController, CategoryController, ProductController, ImportController],
+  controllers: [
+    BrandController,
+    CategoryController,
+    DoorTypeController,
+    ProductController,
+    ImportController,
+  ],
   providers: services,
   exports: services,
 })

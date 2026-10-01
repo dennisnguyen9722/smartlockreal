@@ -176,8 +176,21 @@ export const ProductUpdateSchema = z.object({
   seoDescription: z.string().trim().max(320).nullable().optional(),
   specs: z.record(z.string(), z.unknown()).optional(),
   highlights: HighlightsSchema.optional(),
+  isFeatured: z.boolean().optional(),
+  featuredOrder: z.number().int().min(0).max(999).optional(),
   expectedUpdatedAt: ExpectedUpdatedAtSchema.optional(),
 });
+
+/**
+ * Đặt lại toàn bộ danh sách nổi bật trong một lần gọi.
+ * Thứ tự trong mảng chính là thứ tự hiện trên trang chủ.
+ * Sản phẩm không có trong mảng sẽ bị bỏ đánh dấu — nên lần gọi nào
+ * cũng phải gửi ĐỦ danh sách, không gửi phần thêm vào.
+ */
+export const ProductFeaturedSchema = z
+  .object({ ids: z.array(z.uuid()).max(24) })
+  .strict();
+export type ProductFeaturedInput = z.infer<typeof ProductFeaturedSchema>;
 
 export const ProductStatusChangeSchema = z.object({
   status: ProductStatusSchema,
@@ -199,6 +212,8 @@ export const ProductListQuerySchema = z.object({
   status: ProductListStatusSchema.optional(),
   brandId: z.uuid().optional(),
   categoryId: z.uuid().optional(),
+  /** Chuỗi 'true'/'false' chứ không dùng z.coerce.boolean(): coerce biến "false" thành true */
+  featured: z.enum(['true', 'false']).optional(),
 });
 
 export type ProductCreateInput = z.infer<typeof ProductCreateSchema>;

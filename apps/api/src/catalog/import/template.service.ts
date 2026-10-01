@@ -49,7 +49,9 @@ export class ImportTemplateService {
       ['   Dòng 1: KHOA-A | LOCK | Khóa vân tay X | ... | Đen  | mau=den  | 12500000', 'text'],
       ['   Dòng 2: KHOA-A | LOCK | Khóa vân tay X | ... | Vàng | mau=vang | 12900000', 'text'],
       ['', 'text'],
-      ['3. Mã hãng và mã danh mục lấy ở trang "Tham chiếu".', 'text'],
+      ['3. Cột "Hãng" và "Danh mục" điền TÊN cũng được, không cần tra mã.', 'text'],
+      ['   Vd: gõ thẳng "Khóa vân tay". Chỉ khi có hai danh mục trùng tên thì mới phải', 'text'],
+      ['   dùng mã ở trang "Tham chiếu".', 'text'],
       ['4. Giá nhập số nguyên, KHÔNG dùng dấu chấm hay phẩy. Vd: 12500000', 'text'],
       ['5. Nhập lại file có SKU đã tồn tại sẽ CẬP NHẬT sản phẩm đó, không tạo trùng.', 'text'],
       ['', 'text'],
@@ -188,8 +190,8 @@ export class ImportTemplateService {
     const sheet = workbook.addWorksheet('Tham chiếu');
     sheet.columns = [
       { header: 'Loại', key: 'kind', width: 16 },
-      { header: 'Mã (điền vào file)', key: 'code', width: 30 },
-      { header: 'Tên', key: 'name', width: 40 },
+      { header: 'Mã', key: 'code', width: 30 },
+      { header: 'Tên (điền cột này cũng được)', key: 'name', width: 40 },
       { header: 'Ghi chú', key: 'note', width: 50 },
     ];
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -220,3 +222,4 @@ export class ImportTemplateService {
     return spec.dataType === 'MULTI_SELECT' ? ' (nhiều giá trị, cách nhau bởi dấu phẩy)' : '';
   }
 }
+

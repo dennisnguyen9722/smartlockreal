@@ -13,6 +13,7 @@ import { AuditService, type AuditContext } from '../audit/audit.service';
 import { AppException } from '../common/errors/app.exception';
 import { mapPrismaError } from '../common/errors/prisma-error';
 import { PRISMA } from '../database/database.module';
+import { StorefrontService } from '../storefront/storefront.service';
 
 type FieldError = { field: string; message: string };
 
@@ -50,6 +51,7 @@ export class BannerService {
   constructor(
     @Inject(PRISMA) private readonly db: PrismaClient,
     private readonly audit: AuditService,
+    private readonly storefront: StorefrontService,
   ) {}
 
   /** Tất cả banner, theo vị trí rồi thứ tự (giao diện chia tab theo vị trí) */
@@ -90,6 +92,8 @@ export class BannerService {
     }
 
     await this.audit.log({ staffId, action: 'banner.create', entityType: 'BANNER', entityId: row.id, changes: { after: input }, ctx });
+    // Trang chủ đang đệm trong Redis; xóa để website đổi ngay
+    await this.storefront.clearHomeCache();
     return this.toItem(row);
   }
 
@@ -148,6 +152,8 @@ export class BannerService {
       changes: { before: current, after: changes },
       ctx,
     });
+    // Trang chủ đang đệm trong Redis; xóa để website đổi ngay
+    await this.storefront.clearHomeCache();
     const row = await this.db.banner.findUniqueOrThrow({ where: { id }, select: BANNER_SELECT });
     return this.toItem(row);
   }
@@ -166,6 +172,8 @@ export class BannerService {
       input.ids.map((id, index) => this.db.banner.update({ where: { id }, data: { sortOrder: index } })),
     );
     await this.audit.log({ staffId, action: 'banner.reorder', entityType: 'BANNER', changes: { after: input }, ctx });
+    // Trang chủ đang đệm trong Redis; xóa để website đổi ngay
+    await this.storefront.clearHomeCache();
     return this.list();
   }
 
@@ -175,6 +183,8 @@ export class BannerService {
     if (!current) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
     await this.db.banner.delete({ where: { id } });
     await this.audit.log({ staffId, action: 'banner.delete', entityType: 'BANNER', entityId: id, changes: { before: current }, ctx });
+    // Trang chủ đang đệm trong Redis; xóa để website đổi ngay
+    await this.storefront.clearHomeCache();
   }
 
   // ================= Nội bộ =================

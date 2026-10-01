@@ -30,6 +30,8 @@ import { ContentModule } from './content/content.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { StaffModule } from './staff/staff.module';
 import { ReportsModule } from './reports/reports.module';
+import { ConsultModule } from './consult/consult.module';
+import { StorefrontModule } from './storefront/storefront.module';
 
 @Module({})
 export class AppModule {
@@ -60,6 +62,8 @@ export class AppModule {
         ReviewsModule,
         StaffModule,
         ReportsModule,
+        StorefrontModule,
+        ConsultModule
       ],
       controllers: [
         HealthController,

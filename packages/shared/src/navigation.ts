@@ -30,6 +30,7 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Bán hàng',
     items: [
+      { label: 'Yêu cầu tư vấn', href: '/yeu-cau', icon: 'Inbox', permission: 'customer.view', ready: true },
       { label: 'Đơn hàng', href: '/don-hang', icon: 'ShoppingCart', permission: 'order.view', ready: true },
       { label: 'Báo giá công trình', href: '/bao-gia', icon: 'FileText', permission: 'quote.view', ready: true },
       { label: 'Khách hàng', href: '/khach-hang', icon: 'Users', permission: 'customer.view', ready: true },
@@ -42,6 +43,8 @@ export const ADMIN_NAV: NavGroup[] = [
       { label: 'Danh sách sản phẩm', href: '/san-pham', icon: 'Package', permission: 'catalog.view', ready: true },
       { label: 'Danh mục', href: '/danh-muc', icon: 'FolderTree', permission: 'catalog.view', ready: true },
       { label: 'Hãng', href: '/hang', icon: 'Building2', permission: 'catalog.view', ready: true },
+      { label: 'Loại cửa', href: '/loai-cua', icon: 'DoorOpen', permission: 'catalog.view', ready: true },
+      { label: 'Sản phẩm nổi bật', href: '/noi-bat', icon: 'Star', permission: 'catalog.view', ready: true },
     ],
   },
   {

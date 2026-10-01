@@ -20,5 +20,8 @@ export * from './schemas/review';
 export * from './schemas/staff';
 export * from './schemas/audit';
 export * from './schemas/report';
+export * from './schemas/door-type';
+export * from './schemas/storefront';
+export * from './schemas/tu-van';
 export * from './settings';
 export * from './navigation';

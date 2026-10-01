@@ -13,7 +13,13 @@ import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { Redis } from 'ioredis';
 import { REDIS } from '../redis/redis.module';
-import { checkPasswordStrength, ErrorCode, type StaffRoleCode } from '@ktm/shared';
+import {
+  checkPasswordStrength,
+  ErrorCode,
+  RolePermissions,
+  type Permission,
+  type StaffRoleCode,
+} from '@ktm/shared';
 import { AuditService } from '../audit/audit.service';
 
 export interface RequestContext {
@@ -26,7 +32,14 @@ export interface AuthResult {
   accessToken: string;
   expiresIn: number;
   refreshToken: string;
-  staff: { id: string; email: string; fullName: string; role: StaffRoleCode };
+  staff: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: StaffRoleCode;
+    /// Kèm luôn quyền: menu lọc theo đây, thiếu là menu trống
+    permissions: Permission[];
+  };
 }
 
 @Injectable()
@@ -190,6 +203,8 @@ export class AuthService {
         email: staff.email,
         fullName: staff.fullName,
         role: staff.role as StaffRoleCode,
+        // sao chép vì RolePermissions khai báo readonly
+        permissions: [...RolePermissions[staff.role as StaffRoleCode]],
       },
     };
   }

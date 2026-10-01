@@ -63,6 +63,50 @@ interface PlannedVariant {
   weightGrams: number | null;
 }
 
+/** Bảng tra một danh mục/hãng: theo mã, và theo tên đã chuẩn hóa */
+interface RefLookup {
+  byCode: Map<string, string>;
+  /** Tên trùng nhau thì giá trị là null, buộc người nhập phải dùng mã */
+  byName: Map<string, string | null>;
+}
+
+/** Chuẩn hóa tên để so sánh: bỏ khoảng trắng thừa, không phân biệt chữ hoa chữ thường */
+function normalizeName(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function buildLookup(items: { id: string; slug: string; name: string }[]): RefLookup {
+  const byCode = new Map<string, string>();
+  const byName = new Map<string, string | null>();
+  for (const item of items) {
+    byCode.set(item.slug, item.id);
+    const key = normalizeName(item.name);
+    // Đã gặp tên này rồi -> đánh dấu nhập nhằng
+    byName.set(key, byName.has(key) ? null : item.id);
+  }
+  return { byCode, byName };
+}
+
+/**
+ * Tra một ô "Mã hãng" hoặc "Mã danh mục". Nhận cả ba dạng người nhập hay viết:
+ * đúng mã ("khoa-van-tay"), đúng tên ("Khóa vân tay"), hoặc tên viết khác hoa/thường.
+ * ambiguous = có nhiều bản ghi cùng tên, không đoán được, phải điền mã.
+ */
+function resolveRef(raw: string, lookup: RefLookup): { id: string | null; ambiguous: boolean } {
+  const value = raw.trim();
+  if (!value) return { id: null, ambiguous: false };
+
+  const byCode = lookup.byCode.get(value) ?? lookup.byCode.get(slugifyVi(value));
+  if (byCode) return { id: byCode, ambiguous: false };
+
+  const key = normalizeName(value);
+  if (lookup.byName.has(key)) {
+    const id = lookup.byName.get(key) ?? null;
+    return { id, ambiguous: id === null };
+  }
+  return { id: null, ambiguous: false };
+}
+
 @Injectable()
 export class ImportService {
   constructor(
@@ -73,11 +117,12 @@ export class ImportService {
 
   async preview(rows: RawImportRow[], staffId: string): Promise<ImportPreviewResult> {
     const [brands, categories] = await Promise.all([
-      this.db.brand.findMany({ select: { id: true, slug: true } }),
-      this.db.category.findMany({ select: { id: true, slug: true } }),
+      this.db.brand.findMany({ select: { id: true, slug: true, name: true } }),
+      this.db.category.findMany({ select: { id: true, slug: true, name: true } }),
     ]);
-    const brandBySlug = new Map(brands.map((brand) => [brand.slug, brand.id]));
-    const categoryBySlug = new Map(categories.map((category) => [category.slug, category.id]));
+    // Người nhập được điền MÃ hoặc TÊN. Tra mã trước vì mã là duy nhất.
+    const brandLookup = buildLookup(brands);
+    const categoryLookup = buildLookup(categories);
 
     // Khuôn thông số của từng danh mục, lấy một lần để dùng lại
     const shapesByCategory = new Map<string, SpecDefinitionShape[]>();
@@ -110,18 +155,31 @@ export class ImportService {
         headIssues.push({ column: 'Loại', message: 'Phải là LOCK, ACCESSORY, SERVICE hoặc BUNDLE' });
       }
 
-      const categoryId = categoryBySlug.get(head.fields.categoryCode?.trim() ?? '');
+      const categoryRef = head.fields.categoryCode?.trim() ?? '';
+      const category = resolveRef(categoryRef, categoryLookup);
+      const categoryId = category.id ?? undefined;
       if (!categoryId) {
-        headIssues.push({ column: 'Mã danh mục', message: 'Không tìm thấy, xem trang Tham chiếu' });
+        headIssues.push({
+          column: 'Danh mục',
+          message: category.ambiguous
+            ? `Có nhiều danh mục cùng tên "${categoryRef}", hãy điền mã thay vì tên`
+            : 'Không tìm thấy danh mục này, xem trang Tham chiếu',
+        });
       }
 
-      const brandCode = head.fields.brandCode?.trim();
-      const brandId = brandCode ? brandBySlug.get(brandCode) : undefined;
-      if (brandCode && !brandId) {
-        headIssues.push({ column: 'Mã hãng', message: 'Không tìm thấy, xem trang Tham chiếu' });
+      const brandRef = head.fields.brandCode?.trim() ?? '';
+      const brand = resolveRef(brandRef, brandLookup);
+      const brandId = brand.id ?? undefined;
+      if (brandRef && !brandId) {
+        headIssues.push({
+          column: 'Hãng',
+          message: brand.ambiguous
+            ? `Có nhiều hãng cùng tên "${brandRef}", hãy điền mã thay vì tên`
+            : 'Không tìm thấy hãng này, xem trang Tham chiếu',
+        });
       }
       if (type === 'LOCK' && !brandId) {
-        headIssues.push({ column: 'Mã hãng', message: 'Khóa bắt buộc có hãng' });
+        headIssues.push({ column: 'Hãng', message: 'Khóa bắt buộc có hãng' });
       }
 
       if (headIssues.length > 0 || !categoryId) {
@@ -512,3 +570,4 @@ export class ImportService {
     };
   }
 }
+

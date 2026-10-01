@@ -7,6 +7,8 @@ export interface ImportColumn {
   header: string;
   /** Tên trường khi đọc vào code */
   key: string;
+  /** Tiêu đề cũ vẫn được chấp nhận khi đọc file, để file mẫu tải trước đây không bị hỏng */
+  aliases?: string[];
   width: number;
   required?: boolean;
   note?: string;
@@ -32,12 +34,20 @@ export const PRODUCT_IMPORT_COLUMNS: ImportColumn[] = [
   },
   { header: 'Tên sản phẩm *', key: 'name', width: 38, required: true },
   {
-    header: 'Mã hãng',
+    header: 'Hãng',
     key: 'brandCode',
-    width: 18,
-    note: 'Lấy ở trang Tham chiếu. Bắt buộc với loại LOCK',
+    width: 20,
+    aliases: ['Mã hãng'],
+    note: 'Điền TÊN hãng (vd: Yale) hoặc mã ở trang Tham chiếu. Bắt buộc với loại LOCK',
   },
-  { header: 'Mã danh mục *', key: 'categoryCode', width: 22, required: true, note: 'Lấy ở trang Tham chiếu' },
+  {
+    header: 'Danh mục *',
+    key: 'categoryCode',
+    width: 24,
+    required: true,
+    aliases: ['Mã danh mục *'],
+    note: 'Điền TÊN danh mục (vd: Khóa vân tay) hoặc mã ở trang Tham chiếu',
+  },
   { header: 'Mã model của hãng', key: 'manufacturerCode', width: 20 },
   { header: 'Bảo hành (tháng)', key: 'warrantyMonths', width: 16, note: 'Số nguyên, vd: 24' },
   { header: 'Mô tả ngắn', key: 'shortDescription', width: 40 },
@@ -135,3 +145,4 @@ export function parseOptionValues(raw: string): {
   }
   return { values, labels, errors };
 }
+

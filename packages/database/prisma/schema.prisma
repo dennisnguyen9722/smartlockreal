@@ -261,6 +261,13 @@ model Product {
   /// Điểm nổi bật theo nhóm: [{ "title": "Tính năng", "items": ["..."] }]
   highlights          Json          @default("[]")
   warrantyMonths      Int           @default(0) @map("warranty_months")
+  /// Giá thấp nhất trong các biến thể ĐANG BẬT. Do trigger Postgres tự cập nhật,
+  /// đừng ghi tay. Có cột này mới ORDER BY theo giá đúng trên toàn bộ kết quả.
+  priceFrom           BigInt        @default(0) @map("price_from")
+  /// Hiện ở khối "Sản phẩm nổi bật" trang chủ; chọn tay trong trang quản trị
+  isFeatured          Boolean       @default(false) @map("is_featured")
+  /// Thứ tự trong khối nổi bật, nhỏ đứng trước
+  featuredOrder       Int           @default(0) @map("featured_order")
   seoTitle            String?       @map("seo_title") @db.VarChar(200)
   seoDescription      String?       @map("seo_description") @db.VarChar(320)
   publishedAt         DateTime?     @map("published_at") @db.Timestamptz(3)
@@ -273,6 +280,7 @@ model Product {
   variants          ProductVariant[]
   options           ProductOption[]
   media             ProductMedia[]
+  doorTypes         ProductDoorType[]
   relations         ProductRelation[]  @relation("RelationSource")
   relatedFrom       ProductRelation[]  @relation("RelationTarget")
 
@@ -288,6 +296,8 @@ model Product {
   @@index([brandId])
   @@index([categoryId])
   @@index([type, status])
+  @@index([status, priceFrom])
+  @@index([isFeatured, featuredOrder])
   @@index([specs(ops: JsonbPathOps)], type: Gin)
   @@map("products")
 }
@@ -2371,6 +2381,64 @@ model ReviewRequest {
   @@map("review_requests")
 }
 
+
+// ---------- Yêu cầu tư vấn từ website ----------
+
+enum ConsultKind {
+  /// Khách lẻ mua cho nhà mình
+  RETAIL
+  /// Nhà thầu, chủ đầu tư: chung cư, khách sạn, văn phòng
+  PROJECT
+
+  @@map("consult_kind")
+}
+
+enum ConsultStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WON
+  LOST
+  SPAM
+
+  @@map("consult_status")
+}
+
+/// Khách để lại số trên website. KHÔNG khóa ngoại sang sản phẩm hay loại cửa:
+/// đây là bản ghi lịch sử "lúc đó khách hỏi cái gì", sản phẩm đổi tên hay bị xóa
+/// thì yêu cầu vẫn phải đọc được nguyên vẹn.
+model ConsultRequest {
+  id       String        @id @default(uuid(7)) @db.Uuid
+  kind     ConsultKind   @default(RETAIL)
+  status   ConsultStatus @default(NEW)
+  fullName String        @map("full_name") @db.VarChar(100)
+  /// Dạng +84xxxxxxxxx, chuẩn hóa bằng normalizeVnPhone
+  phone    String        @db.VarChar(16)
+  email    String?       @db.VarChar(255)
+  /// Tên công ty hoặc công trình (yêu cầu dự án)
+  company  String?       @db.VarChar(200)
+  /// Số lượng ước tính (yêu cầu dự án)
+  quantity Int?
+
+  doorTypeName String? @map("door_type_name") @db.VarChar(120)
+  productSlug  String? @map("product_slug") @db.VarChar(160)
+  productName  String? @map("product_name") @db.VarChar(200)
+  message      String?
+  /// Trang khách bấm gửi, để biết nội dung nào ra khách
+  sourcePath   String? @map("source_path") @db.VarChar(500)
+
+  /// Ghi chú nội bộ của nhân viên kinh doanh
+  internalNote String?   @map("internal_note")
+  contactedAt  DateTime? @map("contacted_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([kind, status])
+  @@index([phone])
+  @@map("consult_requests")
+}
+
 // ---------- Cấu hình ----------
 
 /// Cấu hình hệ thống dạng khóa-giá trị; API kiểm tra giá trị bằng Zod
@@ -2638,4 +2706,36 @@ model QuoteLine {
   @@index([quoteId, sortOrder])
   @@index([variantId])
   @@map("quote_lines")
+}
+
+/// Loại cửa mà khóa lắp được. Bảng riêng chứ không phải enum, để sau này
+/// thêm "Cửa thép", "Cửa nhựa lõi thép" chỉ cần thêm dòng, khỏi migration.
+model DoorType {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  slug        String   @unique @db.VarChar(80)
+  name        String   @db.VarChar(80)
+  /// Mô tả ngắn hiện ở trang loại cửa, dùng cho SEO
+  description String?  @db.VarChar(320)
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  products ProductDoorType[]
+
+  @@index([isActive, sortOrder])
+  @@map("door_types")
+}
+
+/// Một khóa lắp được nhiều loại cửa, một loại cửa có nhiều khóa.
+model ProductDoorType {
+  productId  String @map("product_id") @db.Uuid
+  doorTypeId String @map("door_type_id") @db.Uuid
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  doorType DoorType @relation(fields: [doorTypeId], references: [id], onDelete: Cascade)
+
+  @@id([productId, doorTypeId])
+  @@index([doorTypeId])
+  @@map("product_door_types")
 }

@@ -1,0 +1,412 @@
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { Redis } from 'ioredis';
+import type { Prisma, PrismaClient } from '@ktm/database';
+import {
+  ErrorCode,
+  type Paginated,
+  type StorefrontBanner,
+  type StorefrontCard,
+  type StorefrontHome,
+  type StorefrontListQuery,
+  type StorefrontProduct,
+  type StorefrontTaxonomy,
+} from '@ktm/shared';
+import { AppException } from '../common/errors/app.exception';
+import { PRISMA } from '../database/database.module';
+import { REDIS } from '../redis/redis.module';
+import { SettingsService } from '../settings/settings.service';
+import { SpecDefinitionService } from '../catalog/spec-definition.service';
+
+const HOME_CACHE_KEY = 'storefront:home:v1';
+const HOME_CACHE_SECONDS = 60;
+const FEATURED_COUNT = 8;
+
+/** BigInt sang number: tiền VND luôn dưới 2^53 nên không mất chính xác */
+function money(value: bigint | null | undefined): number {
+  return value === null || value === undefined ? 0 : Number(value);
+}
+
+@Injectable()
+export class StorefrontService {
+  constructor(
+    @Inject(PRISMA) private readonly db: PrismaClient,
+    @Inject(REDIS) private readonly redis: Redis,
+    private readonly settings: SettingsService,
+    private readonly specs: SpecDefinitionService,
+  ) {}
+
+  // ================= Trang chủ =================
+
+  async home(): Promise<StorefrontHome> {
+    const cached = await this.redis.get(HOME_CACHE_KEY);
+    if (cached) return JSON.parse(cached) as StorefrontHome;
+
+    const [doorTypes, brands, banners, featuredRows, productTotal, company] = await Promise.all([
+      this.db.doorType.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: {
+          slug: true,
+          name: true,
+          description: true,
+          _count: { select: { products: { where: { product: { status: 'ACTIVE' } } } } },
+        },
+      }),
+      this.db.brand.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: {
+          slug: true,
+          name: true,
+          description: true,
+          _count: { select: { products: { where: { status: 'ACTIVE' } } } },
+        },
+      }),
+      this.activeBanners(),
+      this.db.product.findMany({
+        where: this.publicWhere({}),
+        orderBy: [{ publishedAt: 'desc' }],
+        take: FEATURED_COUNT,
+        select: this.cardSelect(),
+      }),
+      this.db.product.count({ where: { status: 'ACTIVE' } }),
+      this.settings.companyInfo(),
+    ]);
+
+    const home: StorefrontHome = {
+      doorTypes: doorTypes.map((item) => this.toTaxonomy(item, item._count.products)),
+      brands: brands
+        .filter((item) => item._count.products > 0)
+        .map((item) => this.toTaxonomy(item, item._count.products)),
+      banners,
+      featured: featuredRows.map((row) => this.toCard(row)),
+      company: this.pickCompany(company),
+      totals: { products: productTotal, brands: brands.filter((b) => b._count.products > 0).length },
+    };
+
+    await this.redis.set(HOME_CACHE_KEY, JSON.stringify(home), 'EX', HOME_CACHE_SECONDS);
+    return home;
+  }
+
+  /** Gọi khi sửa sản phẩm, banner hay cấu hình để trang chủ cập nhật ngay */
+  async clearHomeCache() {
+    await this.redis.del(HOME_CACHE_KEY);
+  }
+
+  // ================= Danh sách sản phẩm =================
+
+  async listProducts(query: StorefrontListQuery): Promise<
+    Paginated<StorefrontCard> & { appliedFilters: { doorType?: StorefrontTaxonomy } }
+  > {
+    const where = this.publicWhere(query);
+
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+      query.sort === 'ban-chay'
+        ? [{ ratingCount: 'desc' }, { publishedAt: 'desc' }]
+        : query.sort === 'moi-nhat'
+          ? [{ publishedAt: 'desc' }]
+          : [{ name: 'asc' }];
+
+    const [rows, total] = await Promise.all([
+      this.db.product.findMany({
+        where,
+        orderBy,
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        select: this.cardSelect(),
+      }),
+      this.db.product.count({ where }),
+    ]);
+
+    const items = rows.map((row) => this.toCard(row));
+
+    // Sắp theo giá phải làm sau khi đã tính giá thấp nhất của từng sản phẩm,
+    // vì giá nằm ở biến thể chứ không nằm ở sản phẩm.
+    if (query.sort === 'gia-tang') items.sort((a, b) => a.priceFrom - b.priceFrom);
+    if (query.sort === 'gia-giam') items.sort((a, b) => b.priceFrom - a.priceFrom);
+
+    const doorType = query.doorType
+      ? await this.db.doorType.findUnique({
+          where: { slug: query.doorType },
+          select: {
+            slug: true,
+            name: true,
+            description: true,
+            _count: { select: { products: { where: { product: { status: 'ACTIVE' } } } } },
+          },
+        })
+      : null;
+
+    return {
+      items,
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+      appliedFilters: {
+        ...(doorType ? { doorType: this.toTaxonomy(doorType, doorType._count.products) } : {}),
+      },
+    };
+  }
+
+  async listDoorTypes(): Promise<StorefrontTaxonomy[]> {
+    const rows = await this.db.doorType.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        slug: true,
+        name: true,
+        description: true,
+        _count: { select: { products: { where: { product: { status: 'ACTIVE' } } } } },
+      },
+    });
+    return rows.map((row) => this.toTaxonomy(row, row._count.products));
+  }
+
+  // ================= Chi tiết sản phẩm =================
+
+  async getProduct(slug: string): Promise<StorefrontProduct> {
+    const product = await this.db.product.findFirst({
+      where: { slug, status: 'ACTIVE' },
+      include: {
+        brand: { select: { slug: true, name: true } },
+        category: { select: { slug: true, name: true } },
+        doorTypes: { include: { doorType: { select: { slug: true, name: true } } } },
+        media: { orderBy: { sortOrder: 'asc' }, select: { url: true, variantId: true } },
+        options: {
+          orderBy: { sortOrder: 'asc' },
+          include: { values: { orderBy: { sortOrder: 'asc' } } },
+        },
+        variants: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            optionValues: { include: { optionValue: { include: { option: true } } } },
+            media: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
+          },
+        },
+      },
+    });
+
+    if (!product) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (product.variants.length === 0) {
+      // Đang bán mà không còn biến thể nào bật: coi như không tồn tại với khách
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+
+    const shapes = await this.specs.getShapes(product.categoryId);
+    const specValues = (product.specs ?? {}) as Record<string, unknown>;
+    const specs = shapes
+      .filter((shape) => specValues[shape.code] !== undefined && specValues[shape.code] !== null)
+      .map((shape) => ({
+        name: shape.name,
+        value: this.formatSpec(specValues[shape.code]),
+      }))
+      .filter((row) => row.value.length > 0);
+
+    const prices = product.variants.map((variant) => money(variant.price));
+
+    return {
+      slug: product.slug,
+      name: product.name,
+      shortDescription: product.shortDescription,
+      description: product.description,
+      brand: product.brand,
+      category: product.category,
+      doorTypes: product.doorTypes.map((link) => link.doorType),
+      warrantyMonths: product.warrantyMonths,
+      specs,
+      highlights: Array.isArray(product.highlights)
+        ? (product.highlights as { title: string; items: string[] }[])
+        : [],
+      images: product.media.map((item) => item.url),
+      options: product.options.map((option) => ({
+        code: option.code,
+        name: option.name,
+        values: option.values.map((value) => ({ code: value.code, value: value.value })),
+      })),
+      variants: product.variants.map((variant) => ({
+        sku: variant.sku,
+        name: variant.name,
+        price: money(variant.price),
+        compareAtPrice: variant.compareAtPrice === null ? null : money(variant.compareAtPrice),
+        optionValues: Object.fromEntries(
+          variant.optionValues.map((link) => [link.optionValue.option.code, link.optionValue.code]),
+        ),
+        imageUrl: variant.media[0]?.url ?? null,
+      })),
+      priceFrom: prices.length > 0 ? Math.min(...prices) : 0,
+      seoTitle: product.seoTitle,
+      seoDescription: product.seoDescription,
+      ratingCount: product.ratingCount,
+      ratingAverage:
+        product.ratingCount > 0
+          ? Math.round((product.ratingSum / product.ratingCount) * 10) / 10
+          : null,
+    };
+  }
+
+  // ================= Dùng chung =================
+
+  /** Khách chỉ thấy sản phẩm ĐANG BÁN và còn ít nhất một biến thể bật */
+  private publicWhere(query: Partial<StorefrontListQuery>): Prisma.ProductWhereInput {
+    // Một điều kiện biến thể duy nhất: vừa phải đang bật, vừa phải lọt khoảng giá.
+    // Tách làm hai lần khai `variants` thì lần sau ghi đè lần trước, rất khó thấy.
+    const variantWhere: Prisma.ProductVariantWhereInput = {
+      isActive: true,
+      ...(query.minPrice !== undefined || query.maxPrice !== undefined
+        ? {
+            price: {
+              ...(query.minPrice !== undefined ? { gte: BigInt(query.minPrice) } : {}),
+              ...(query.maxPrice !== undefined ? { lte: BigInt(query.maxPrice) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    return {
+      status: 'ACTIVE',
+      variants: { some: variantWhere },
+      ...(query.doorType ? { doorTypes: { some: { doorType: { slug: query.doorType } } } } : {}),
+      ...(query.brand ? { brand: { slug: query.brand } } : {}),
+      ...(query.category ? { category: { slug: query.category } } : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { name: { contains: query.q, mode: 'insensitive' } },
+              { manufacturerCode: { contains: query.q, mode: 'insensitive' } },
+              { variants: { some: { sku: { contains: query.q.toUpperCase() } } } },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private cardSelect() {
+    return {
+      slug: true,
+      name: true,
+      warrantyMonths: true,
+      brand: { select: { name: true } },
+      category: { select: { name: true } },
+      doorTypes: { select: { doorType: { select: { slug: true } } } },
+      media: { orderBy: { sortOrder: 'asc' as const }, take: 1, select: { url: true } },
+      variants: {
+        where: { isActive: true },
+        orderBy: { price: 'asc' as const },
+        select: {
+          price: true,
+          compareAtPrice: true,
+          optionValues: {
+            select: { optionValue: { select: { value: true, option: { select: { code: true } } } } },
+          },
+        },
+      },
+    };
+  }
+
+  private toCard(row: {
+    slug: string;
+    name: string;
+    warrantyMonths: number;
+    brand: { name: string } | null;
+    category: { name: string };
+    doorTypes: { doorType: { slug: string } }[];
+    media: { url: string }[];
+    variants: {
+      price: bigint;
+      compareAtPrice: bigint | null;
+      optionValues: { optionValue: { value: string; option: { code: string } } }[];
+    }[];
+  }): StorefrontCard {
+    const cheapest = row.variants[0];
+    // Chỉ lấy màu, không lấy app hay remote: chấm tròn trên thẻ chỉ nói về màu
+    const colors = new Set<string>();
+    for (const variant of row.variants) {
+      for (const link of variant.optionValues) {
+        if (link.optionValue.option.code === 'mau') colors.add(link.optionValue.value);
+      }
+    }
+
+    return {
+      slug: row.slug,
+      name: row.name,
+      brandName: row.brand?.name ?? null,
+      categoryName: row.category.name,
+      doorTypeSlugs: row.doorTypes.map((link) => link.doorType.slug),
+      priceFrom: money(cheapest?.price),
+      compareAtPrice:
+        cheapest?.compareAtPrice === null || cheapest?.compareAtPrice === undefined
+          ? null
+          : money(cheapest.compareAtPrice),
+      variantCount: row.variants.length,
+      colorLabels: [...colors],
+      imageUrl: row.media[0]?.url ?? null,
+      warrantyMonths: row.warrantyMonths,
+    };
+  }
+
+  private toTaxonomy(
+    row: { slug: string; name: string; description: string | null },
+    productCount: number,
+  ): StorefrontTaxonomy {
+    return {
+      slug: row.slug,
+      name: row.name,
+      description: row.description,
+      productCount,
+    };
+  }
+
+  private async activeBanners(): Promise<StorefrontBanner[]> {
+    const now = new Date();
+    const rows = await this.db.banner.findMany({
+      where: {
+        isActive: true,
+        placement: 'HOME_HERO',
+        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+        AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
+      },
+      orderBy: [{ sortOrder: 'asc' }],
+      select: {
+        title: true,
+        linkUrl: true,
+        desktopMedia: { select: { url: true } },
+        mobileMedia: { select: { url: true } },
+      },
+    });
+
+    return rows.map((row) => ({
+      title: row.title,
+      imageUrl: row.desktopMedia?.url ?? null,
+      mobileImageUrl: row.mobileMedia?.url ?? null,
+      linkUrl: row.linkUrl,
+    }));
+  }
+
+  /**
+   * Đọc thông tin công ty từ cấu hình mà không ràng vào tên trường cụ thể:
+   * nhận nhiều tên gọi có thể có, thiếu thì trả null chứ không làm vỡ build.
+   */
+  private pickCompany(raw: unknown): StorefrontHome['company'] {
+    const info = (raw ?? {}) as Record<string, unknown>;
+    const pick = (...keys: string[]): string | null => {
+      for (const key of keys) {
+        const value = info[key];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+      return null;
+    };
+    return {
+      name: pick('name', 'companyName', 'shortName'),
+      hotline: pick('hotline', 'phone', 'phoneNumber', 'tel'),
+      email: pick('email', 'contactEmail'),
+      address: pick('address', 'headOffice', 'addressLine'),
+    };
+  }
+
+  private formatSpec(value: unknown): string {
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value === 'boolean') return value ? 'Có' : 'Không';
+    return String(value ?? '').trim();
+  }
+}

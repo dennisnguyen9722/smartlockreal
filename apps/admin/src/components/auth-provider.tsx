@@ -32,7 +32,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applySession = useCallback((data: LoginResponse) => {
     tokenRef.current = data.accessToken;
     setAccessToken(data.accessToken);
-    setStaff(data.staff);
+    // Giữ lại permissions đang có nếu phản hồi mới không kèm theo:
+    // mất permissions là menu bên trái trống trơn cho tới khi tải lại trang.
+    setStaff((current) =>
+      data.staff.permissions?.length
+        ? data.staff
+        : current?.permissions
+          ? { ...data.staff, permissions: current.permissions }
+          : data.staff,
+    );
     setStatus('authenticated');
   }, []);
 

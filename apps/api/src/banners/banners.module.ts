@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StorefrontModule } from '../storefront/storefront.module';
 import { BannerController } from './banner.controller';
 import { BannerService } from './banner.service';
 
@@ -6,6 +7,8 @@ import { BannerService } from './banner.service';
 const services = [BannerService];
 
 @Module({
+  // Cần StorefrontService để xóa bộ nhớ đệm trang chủ sau khi sửa banner
+  imports: [StorefrontModule],
   controllers: [BannerController],
   providers: services,
   exports: services,

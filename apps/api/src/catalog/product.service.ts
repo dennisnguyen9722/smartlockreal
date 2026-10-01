@@ -89,6 +89,7 @@ export class ProductService {
       ...(query.type ? { type: query.type } : {}),
       ...(query.brandId ? { brandId: query.brandId } : {}),
       ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+      ...(query.featured ? { isFeatured: query.featured === 'true' } : {}),
       ...(query.search
         ? {
             OR: [
@@ -357,6 +358,45 @@ export class ProductService {
       ctx,
     });
     return this.getById(id);
+  }
+
+  /**
+   * Đặt lại toàn bộ danh sách nổi bật.
+   * Làm trong một giao dịch: bỏ hết cờ cũ rồi bật lại theo đúng thứ tự gửi lên.
+   * Nếu tách hai lần gọi, lỡ đứt giữa chừng là trang chủ trống không còn gì.
+   */
+  async setFeatured(ids: string[], staffId: string, ctx: AuditContext) {
+    if (ids.length > 0) {
+      const dem = await this.db.product.count({ where: { id: { in: ids } } });
+      if (dem !== ids.length) {
+        throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND, {
+          hint: 'Có sản phẩm trong danh sách không còn tồn tại, tải lại trang rồi chọn lại',
+        });
+      }
+    }
+
+    await this.db.$transaction([
+      this.db.product.updateMany({
+        where: { isFeatured: true },
+        data: { isFeatured: false, featuredOrder: 0 },
+      }),
+      ...ids.map((id, index) =>
+        this.db.product.update({
+          where: { id },
+          data: { isFeatured: true, featuredOrder: index },
+        }),
+      ),
+    ]);
+
+    await this.audit.log({
+      staffId,
+      action: 'product.featured',
+      entityType: 'PRODUCT',
+      changes: { after: { ids } },
+      ctx,
+    });
+
+    return { count: ids.length };
   }
 
   async changeStatus(

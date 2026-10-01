@@ -20,6 +20,7 @@ import {
   Permission,
   ProductBulkDeleteSchema,
   ProductCreateSchema,
+  ProductFeaturedSchema,
   ProductListQuerySchema,
   ProductMediaAttachSchema,
   ProductMediaReorderSchema,
@@ -293,6 +294,18 @@ export class ProductController {
       user.id,
       auditContext(req),
     );
+  }
+
+  /**
+   * Đặt lại danh sách sản phẩm nổi bật của trang chủ.
+   * Khai TRƯỚC các tuyến ':id' để Nest không hiểu nhầm "featured" là một id.
+   */
+  @Post('featured')
+  @RequirePermissions(Permission.CATALOG_MANAGE)
+  @HttpCode(HttpStatus.OK)
+  setFeatured(@Body() body: unknown, @CurrentUser() user: AuthUser, @Req() req: Request) {
+    const { ids } = parse(ProductFeaturedSchema, body);
+    return this.products.setFeatured(ids, user.id, auditContext(req));
   }
 
   /** Đổi trạng thái có kiểm tra điều kiện (xem ALLOWED_TRANSITIONS trong ProductService) */

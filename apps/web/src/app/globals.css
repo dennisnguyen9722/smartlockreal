@@ -1,0 +1,159 @@
+/*
+ * Giao diện website bán hàng.
+ * Nạp chồng lên @ktm/ui: trang quản trị giữ bảng màu trung tính,
+ * website dùng bảng màu thương hiệu lấy từ logo.
+ */
+@import '@ktm/ui/globals.css';
+
+:root {
+    /* Lấy trực tiếp từ logo, đã đo độ tương phản */
+    --kt-navy: #00244f; /* chữ trên nền trắng: 15,4:1 */
+    --kt-navy-deep: #001830;
+    --kt-navy-soft: #0a2f60;
+    --kt-gold: #d4a537; /* CHỈ dùng trên nền tối: trên trắng chỉ 2,3:1 */
+    --kt-gold-soft: #e8c76b; /* trên navy: 9,4:1 */
+    --kt-gold-ink: #8a6417; /* vàng dùng làm CHỮ trên nền sáng: 5,1:1 */
+    --kt-cream: #fbf9f4;
+    --kt-ink-muted: #5a6472; /* chữ phụ trên nền sáng: 5,7:1 */
+    --kt-line: #e6e9ee;
+}
+
+@theme inline {
+    --color-navy: var(--kt-navy);
+    --color-navy-deep: var(--kt-navy-deep);
+    --color-navy-soft: var(--kt-navy-soft);
+    --color-gold: var(--kt-gold);
+    --color-gold-soft: var(--kt-gold-soft);
+    --color-gold-ink: var(--kt-gold-ink);
+    --color-cream: var(--kt-cream);
+    --color-ink-muted: var(--kt-ink-muted);
+    --color-line: var(--kt-line);
+}
+
+/*
+ * Kính giả: trong mờ + viền sáng + vệt sáng mép trên + đổ bóng sâu.
+ * KHÔNG có backdrop-filter nên vẽ một lần rồi thôi — dùng cho thẻ sản phẩm,
+ * nơi có hàng chục cái trên một trang.
+ */
+.kinh {
+    background: rgba(255, 255, 255, 0.075);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 22px 48px rgba(0, 8, 24, 0.42);
+}
+
+.kinh:hover {
+    background: rgba(255, 255, 255, 0.13);
+    border-color: rgba(255, 255, 255, 0.32);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.4),
+        0 30px 64px rgba(0, 8, 24, 0.55);
+}
+
+/*
+ * Kính thật: có backdrop-filter. CHỈ dùng cho thanh điều hướng — một phần tử,
+ * luôn hiện, vùng nhỏ. Lớp màu đậm phía dưới mới là thứ lo độ tương phản;
+ * làm mờ chỉ để đẹp, nên bán kính nhỏ cũng đủ.
+ */
+.kinh-thanh {
+    background: rgba(0, 28, 62, 0.72);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+/* Trình duyệt không hỗ trợ, hoặc người dùng tắt hiệu ứng trong suốt */
+@supports not (backdrop-filter: blur(1px)) {
+    .kinh-thanh {
+        background: var(--kt-navy);
+    }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .kinh-thanh {
+        background: var(--kt-navy);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+/* Vùng sáng mờ phía sau khối sản phẩm, để kính có cái mà nhìn xuyên qua */
+.nen-sang-mo {
+    background:
+        radial-gradient(900px 520px at 12% 0%, rgba(32, 96, 180, 0.45), transparent 62%),
+        radial-gradient(760px 480px at 88% 86%, rgba(212, 165, 55, 0.22), transparent 64%);
+}
+
+/* Giá tiền và số liệu: chữ số đều bề ngang, cột số không nhảy */
+.so-lieu {
+    font-variant-numeric: tabular-nums;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/*
+ * HTML do trình soạn thảo trong trang quản trị sinh ra (câu trả lời FAQ,
+ * nội dung bài viết). Thẻ p/ul/a không mang class nên phải tạo kiểu theo thẻ;
+ * giới hạn trong .noi-dung-html để không đụng vào phần còn lại của trang.
+ */
+.noi-dung-html > * + * {
+    margin-top: 0.75rem;
+}
+
+.noi-dung-html ul,
+.noi-dung-html ol {
+    padding-left: 1.25rem;
+    list-style: revert;
+}
+
+.noi-dung-html li + li {
+    margin-top: 0.35rem;
+}
+
+.noi-dung-html a {
+    color: var(--kt-gold-soft);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.noi-dung-html strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+/*
+ * Thẻ sản phẩm. Đậm hơn .kinh thường: nền sáng hơn, viền rõ hơn, bóng sâu hơn.
+ * Lý do: ảnh sản phẩm là ảnh NỀN TRẮNG tràn hết bề ngang. Thẻ mờ quá thì phần
+ * chữ phía dưới trông như chú thích rời chứ không phải một khối liền với ảnh.
+ * Vẫn không dùng backdrop-filter — một trang có hàng chục thẻ.
+ */
+.the-sp {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        0 18px 40px rgba(0, 8, 24, 0.55);
+}
+
+/* Di chuột: viền ngả vàng thương hiệu, bóng sâu thêm */
+.the-sp:hover {
+    border-color: rgba(232, 199, 107, 0.5);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        0 28px 64px rgba(0, 8, 24, 0.7);
+}
+
+/* Vạch ngăn giữa ảnh trắng và phần chữ tối, để hai mảng không dính vào nhau */
+.the-sp .vung-anh {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}

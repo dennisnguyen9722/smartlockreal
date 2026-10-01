@@ -56,7 +56,12 @@ export class ImportParserService {
     // Đọc tiêu đề, phân biệt cột cố định và cột thông số
     const keyByColumn = new Map<number, string>();
     const specNameByColumn = new Map<number, string>();
-    const headerByText = new Map(PRODUCT_IMPORT_COLUMNS.map((column) => [column.header, column.key]));
+    // Nhận cả tiêu đề hiện tại và tiêu đề cũ, để file mẫu tải từ trước vẫn đọc được
+    const headerByText = new Map<string, string>();
+    for (const column of PRODUCT_IMPORT_COLUMNS) {
+      headerByText.set(column.header, column.key);
+      for (const alias of column.aliases ?? []) headerByText.set(alias, column.key);
+    }
 
     sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, columnNumber) => {
       const header = cellText(cell);
@@ -111,3 +116,4 @@ export class ImportParserService {
     return rows;
   }
 }
+

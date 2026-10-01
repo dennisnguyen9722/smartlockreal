@@ -57,6 +57,11 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   'spec_definition.create': 'Thêm thông số kỹ thuật',
   'spec_definition.update': 'Sửa thông số kỹ thuật',
   'spec_definition.delete': 'Xóa thông số kỹ thuật',
+  'door_type.create': 'Tạo loại cửa',
+  'door_type.update': 'Sửa loại cửa',
+  'door_type.delete': 'Xóa loại cửa',
+  'product.door_types': 'Đổi loại cửa của sản phẩm',
+  'product.door_types_bulk': 'Gắn loại cửa hàng loạt',
 
   // Nội dung
   'post.create': 'Tạo bài viết',
@@ -143,6 +148,7 @@ export const AUDIT_ENTITY_LABEL: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
   PRODUCT: 'Sản phẩm',
   PRODUCT_VARIANT: 'Biến thể',
+  DOOR_TYPE: 'Loại cửa',
   CATEGORY: 'Danh mục',
   BRAND: 'Hãng',
   SPEC_DEFINITION: 'Thông số kỹ thuật',
