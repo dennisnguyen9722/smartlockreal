@@ -10,7 +10,7 @@ import type {
     StorefrontShowroom,
 } from '@ktm/shared';
 import { ProductCard } from '@/components/product-card';
-import { dinhDangDienThoai, soGoi } from '@/lib/api';
+import { boAnh, dinhDangDienThoai, soGoi } from '@/lib/api';
 import { FormTuVan } from '@/components/form-tu-van';
 
 /**
@@ -85,7 +85,7 @@ export function DaiDuAn({ hotline }: { hotline: string | null }) {
 
     return (
         <section id="bao-gia-du-an" className="scroll-mt-20 border-y border-white/10 bg-[var(--kt-navy)]">
-            <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+            <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
                 <div className="grid gap-10 lg:grid-cols-[1fr_1fr] lg:gap-14">
                     <div>
                         <div className="border-l-2 border-[var(--kt-gold)] pl-6">
@@ -144,7 +144,7 @@ export function BangKhuyenMai({ banners }: { banners: StorefrontBanner[] }) {
     if (banners.length === 0) return null;
 
     return (
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+        <section className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10">
             <ul className={banners.length > 1 ? 'grid gap-4 md:grid-cols-2' : ''}>
                 {banners.map((banner, chiSo) => {
                     const anh = (
@@ -185,7 +185,7 @@ export function KhoiShowroom({ showrooms }: { showrooms: StorefrontShowroom[] })
     if (showrooms.length === 0) return null;
 
     return (
-        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
             <TieuDeKhoi
                 nhan="Xem tận tay"
                 tieuDe="Đến showroom thử trực tiếp"
@@ -197,7 +197,8 @@ export function KhoiShowroom({ showrooms }: { showrooms: StorefrontShowroom[] })
                     <li key={showroom.slug} className="kinh flex flex-col overflow-hidden rounded-3xl">
                         {showroom.imageUrl && (
                             <img
-                                src={showroom.imageUrl}
+                                {...boAnh(showroom.imageUrl)}
+                                sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 400px"
                                 alt={showroom.name}
                                 loading="lazy"
                                 decoding="async"
@@ -268,7 +269,7 @@ export function KhoiDanhGia({
 
     return (
         <section className="nen-sang-mo border-y border-white/10">
-            <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+            <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                     <TieuDeKhoi nhan="Khách đã lắp nói gì" tieuDe="Đánh giá thật từ khách hàng" />
                     {diemTrungBinh !== null && (
@@ -362,7 +363,7 @@ export function KhoiBaiViet({ posts }: { posts: StorefrontPost[] }) {
     if (posts.length === 0) return null;
 
     return (
-        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <TieuDeKhoi
                     nhan="Kinh nghiệm chọn khóa"
@@ -386,7 +387,8 @@ export function KhoiBaiViet({ posts }: { posts: StorefrontPost[] }) {
                         >
                             {baiViet.coverUrl && (
                                 <img
-                                    src={baiViet.coverUrl}
+                                    {...boAnh(baiViet.coverUrl)}
+                                    sizes="(max-width: 768px) 100vw, 400px"
                                     alt=""
                                     loading="lazy"
                                     decoding="async"
@@ -450,7 +452,7 @@ export function KhoiTheoHang({ sections }: { sections: StorefrontBrandSection[] 
                     id={`hang-${muc.brand.slug}`}
                     className={`scroll-mt-20 border-b border-white/10${chiSo % 2 === 1 ? ' nen-sang-mo' : ''}`}
                 >
-                    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:py-16">
+                    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:py-16">
                         <div className="flex flex-wrap items-end justify-between gap-4">
                             <div>
                                 <p className="text-xs font-semibold tracking-[0.22em] text-[var(--kt-gold-soft)] uppercase">
@@ -502,7 +504,7 @@ export function KhoiCauHoi({ faqs }: { faqs: StorefrontFaq[] }) {
     if (faqs.length === 0) return null;
 
     return (
-        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
             <TieuDeKhoi nhan="Hỏi đáp" tieuDe="Câu hỏi thường gặp" />
 
             {/* Khung ngoài rộng bằng các khối khác để lề trái thẳng hàng,

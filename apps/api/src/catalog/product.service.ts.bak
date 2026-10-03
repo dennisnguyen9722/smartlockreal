@@ -20,10 +20,56 @@ import {
 import { AuditService, type AuditContext } from '../audit/audit.service';
 import { AppException } from '../common/errors/app.exception';
 import { mapPrismaError } from '../common/errors/prisma-error';
+import { sanitizeRichHtml } from '../common/rich-text';
 import { generateUniqueSlug } from '../common/slug.util';
 import { PRISMA } from '../database/database.module';
 import { SpecDefinitionService } from './spec-definition.service';
 import { summarizeUsage, VARIANT_USAGE_COUNT } from './variant-usage';
+
+/** HTML rỗng TinyMCE sinh ra khi người dùng xóa hết chữ: "<p></p>", "<p>&nbsp;</p>", "<p><br></p>" */
+const HTML_RONG = /^(\s|&nbsp;|<p>|<\/p>|<br\s*\/?>)*$/i;
+
+/** Có ít nhất một thẻ thật thì coi là HTML; "cửa < 45mm" không tính */
+const CO_THE_HTML =
+  /<(p|h[1-6]|ul|ol|li|table|tr|td|th|img|figure|blockquote|br|strong|em|b|i|u|s|a|div|span|hr|iframe)\b[^>]*>/i;
+
+function thoatHtml(chu: string): string {
+  return chu.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Văn bản thường -> HTML: dòng trống ngăn đoạn, xuống dòng đơn thành <br>.
+ * Dùng cho dữ liệu không đi qua TinyMCE (nhập từ Excel, gọi thẳng API).
+ */
+function vanBanSangHtml(chu: string): string {
+  return chu
+    .split(/\r?\n\s*\r?\n/)
+    .map((doan) => doan.trim())
+    .filter(Boolean)
+    .map((doan) => `<p>${thoatHtml(doan).split(/\r?\n/).join('<br />')}</p>`)
+    .join('');
+}
+
+/**
+ * Chuẩn hóa + lọc mô tả chi tiết trước khi ghi vào database.
+ *
+ * Dùng chung bộ lọc với bài viết / trang tĩnh (common/rich-text.ts): dán từ Word hay
+ * web khác cũng không mang theo mã rác, màu chữ, font lạ — và không nhét được script
+ * vào trang sản phẩm.
+ *
+ * Nội dung không phải HTML thì đổi sang HTML trước, để từ nay về sau MỌI bản ghi mới
+ * đều là HTML. Nếu để nguyên văn bản thường rồi mới lọc, bộ lọc sẽ đổi "<" thành
+ * "&lt;" và website hiện ra đúng chữ "&lt;" cho khách đọc.
+ *
+ * undefined = không gửi trường này lên, Prisma bỏ qua, giữ nguyên bản cũ.
+ * null (hoặc gõ rồi xóa hết) = ghi null, trang sản phẩm ẩn luôn khối mô tả.
+ */
+function moTaSach(chu: string | null | undefined): string | null | undefined {
+  if (chu === undefined || chu === null) return chu;
+  const nguon = CO_THE_HTML.test(chu) ? chu : vanBanSangHtml(chu);
+  const sach = sanitizeRichHtml(nguon);
+  return HTML_RONG.test(sach) ? null : sach;
+}
 
 /**
  * Chuyển trạng thái hợp lệ.
@@ -206,7 +252,8 @@ export class ProductService {
             name: input.name,
             manufacturerCode: input.manufacturerCode,
             shortDescription: input.shortDescription,
-            description: input.description,
+            // Mô tả chi tiết soạn bằng TinyMCE: lọc HTML y như bài viết, trang tĩnh
+            description: moTaSach(input.description),
             specs: toJsonSafe(validation.value) as JsonObject,
             highlights: toJsonSafe(input.highlights) as JsonObject[],
             warrantyMonths: input.warrantyMonths ?? 0,
@@ -324,6 +371,8 @@ export class ProductService {
           where: { id, updatedAt: before.updatedAt },
           data: {
             ...changes,
+            // Đặt SAU ...changes để đè bản chưa lọc. undefined = không gửi lên thì không đụng tới.
+            description: moTaSach(changes.description),
             specs,
             highlights: changes.highlights
               ? (toJsonSafe(changes.highlights) as JsonObject[])
@@ -624,3 +673,4 @@ export class ProductService {
     });
   }
 }
+

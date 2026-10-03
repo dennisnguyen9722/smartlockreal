@@ -7,6 +7,37 @@ import { errorText } from '@/lib/error-text';
 const API_KEY = process.env.NEXT_PUBLIC_TINYMCE_API_KEY ?? '';
 
 /**
+ * Giao diện bên trong khung soạn thảo.
+ *
+ * Bề ngang chữ để 760px cho khớp bài viết ngoài website (max-w-3xl = 768px, trừ
+ * padding còn ~720px chữ). Người viết xuống dòng ở đâu trong này thì ngoài web
+ * xuống dòng ở đó — đỡ phải lưu rồi mở web ra xem mới biết.
+ *
+ * Nhưng 760px căn giữa trong khung rộng 1200px mà nền trắng trơn thì con trỏ nằm
+ * chơ vơ giữa khoảng trắng, nhìn như gõ nhầm chỗ. Nên tô nền xám và để phần chữ
+ * thành một "trang giấy" trắng nổi lên: mắt nhận ra ngay đâu là vùng gõ.
+ */
+const NEN_GIAY = [
+    'html { background: #f1f2f4; }',
+    'body { box-sizing: border-box; max-width: 760px; margin: 16px auto; padding: 24px 20px;' +
+        ' min-height: calc(100vh - 32px); background: #fff; border-radius: 8px;' +
+        ' box-shadow: 0 1px 3px rgb(0 0 0 / 0.08); }',
+];
+
+/** Bản gọn (câu trả lời FAQ): khung đã nhỏ sẵn, thêm trang giấy chỉ tốn chỗ */
+const NEN_GON = ['body { margin: 10px 12px; }'];
+
+const KIEU_CHUNG = [
+    'body { font-family: system-ui, sans-serif; font-size: 16px; line-height: 1.7; }',
+    'img { max-width: 100%; height: auto; }',
+    'figure { margin: 1rem 0; } figcaption { font-size: 14px; color: #666; text-align: center; }',
+    'table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 6px 8px; }',
+    '.text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }',
+    '.img-center { display: block; margin-left: auto; margin-right: auto; }',
+    '.img-left { float: left; margin: 0 1rem 1rem 0; } .img-right { float: right; margin: 0 0 1rem 1rem; }',
+];
+
+/**
  * Trình soạn thảo nội dung (bài viết, trang tĩnh, chính sách, câu trả lời FAQ): TinyMCE bản cloud (tải từ cdn.tiny.cloud bằng khóa NEXT_PUBLIC_TINYMCE_API_KEY).
  *
  * Cấu hình (plugins, toolbar, định dạng) PHẢI khớp danh sách lọc HTML ở apps/api/src/posts/rich-text.ts.
@@ -133,17 +164,11 @@ export function RichTextEditor({
                     table_advtab: false,
                     table_cell_advtab: false,
                     table_row_advtab: false,
-                    content_style: [
-                        'body { font-family: system-ui, sans-serif; font-size: 16px; line-height: 1.7; max-width: 760px; margin: 1rem auto; padding: 0 1rem; }',
-                        'img { max-width: 100%; height: auto; }',
-                        'figure { margin: 1rem 0; } figcaption { font-size: 14px; color: #666; text-align: center; }',
-                        'table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 6px 8px; }',
-                        '.text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }',
-                        '.img-center { display: block; margin-left: auto; margin-right: auto; }',
-                        '.img-left { float: left; margin: 0 1rem 1rem 0; } .img-right { float: right; margin: 0 0 1rem 1rem; }',
-                    ].join('\n'),
+                    // Phần khung đặt SAU phần chung để đè được margin/padding mặc định
+                    content_style: [...KIEU_CHUNG, ...(compact ? NEN_GON : NEN_GIAY)].join('\n'),
                 }}
             />
         </div>
     );
 }
+

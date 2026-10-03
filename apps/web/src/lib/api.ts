@@ -1,8 +1,16 @@
+import { imageUrl } from '@ktm/shared';
 import type {
   Paginated,
   StorefrontCard,
   StorefrontHome,
+  StorefrontPost,
+  StorefrontPostDetail,
+  StorefrontPostList,
+  StorefrontPolicy,
+  StorefrontPolicyDetail,
   StorefrontProduct,
+  StorefrontShowroom,
+  StorefrontShowroomDetail,
   StorefrontTaxonomy,
 } from '@ktm/shared';
 
@@ -130,17 +138,89 @@ export function layLoaiCua(): Promise<StorefrontTaxonomy[]> {
   return doc<StorefrontTaxonomy[]>('/public/door-types', 300);
 }
 
-export function timSanPham(thamSo: Record<string, string | number | undefined>) {
+function chuanHoaDanhSach(tho: unknown): DanhSachSanPham {
+  const goc = (tho ?? {}) as Record<string, unknown>;
+  const loc = (goc.appliedFilters ?? {}) as Record<string, unknown>;
+  const loaiCua = loc.doorType;
+
+  return {
+    items: mang<StorefrontCard>(goc.items),
+    total: so(goc.total),
+    page: so(goc.page, 1),
+    pageSize: so(goc.pageSize, 24),
+    appliedFilters:
+      loaiCua && typeof loaiCua === 'object'
+        ? { doorType: loaiCua as StorefrontTaxonomy }
+        : {},
+  };
+}
+
+function chuanHoaSanPham(tho: unknown): StorefrontProduct | null {
+  const goc = (tho ?? {}) as Record<string, unknown>;
+  // Không có slug và tên thì không phải sản phẩm, coi như không tìm thấy
+  if (typeof goc.slug !== 'string' || typeof goc.name !== 'string') return null;
+
+  const danhMuc = (goc.category ?? {}) as Record<string, unknown>;
+  const hang = goc.brand as Record<string, unknown> | null | undefined;
+
+  return {
+    slug: goc.slug,
+    name: goc.name,
+    shortDescription: chuoiHoacNull(goc.shortDescription),
+    description: chuoiHoacNull(goc.description),
+    brand:
+      hang && typeof hang === 'object' && typeof hang.slug === 'string'
+        ? { slug: hang.slug, name: String(hang.name ?? '') }
+        : null,
+    category: {
+      slug: typeof danhMuc.slug === 'string' ? danhMuc.slug : '',
+      name: typeof danhMuc.name === 'string' ? danhMuc.name : '',
+    },
+    doorTypes: mang(goc.doorTypes),
+    warrantyMonths: so(goc.warrantyMonths),
+    specs: mang(goc.specs),
+    highlights: mang(goc.highlights),
+    images: mang<string>(goc.images),
+    options: mang(goc.options),
+    variants: mang(goc.variants),
+    priceFrom: so(goc.priceFrom),
+    seoTitle: chuoiHoacNull(goc.seoTitle),
+    seoDescription: chuoiHoacNull(goc.seoDescription),
+    ratingCount: so(goc.ratingCount),
+    ratingAverage: soHoacNull(goc.ratingAverage),
+  };
+}
+
+export async function timSanPham(
+  thamSo: Record<string, string | number | undefined>,
+): Promise<DanhSachSanPham> {
   const query = new URLSearchParams();
   for (const [khoa, giaTri] of Object.entries(thamSo)) {
     if (giaTri !== undefined && giaTri !== '') query.set(khoa, String(giaTri));
   }
   const chuoi = query.toString();
-  return doc<DanhSachSanPham>(`/public/products${chuoi ? `?${chuoi}` : ''}`);
+  return chuanHoaDanhSach(await doc<unknown>(`/public/products${chuoi ? `?${chuoi}` : ''}`));
 }
 
-export function laySanPham(slug: string) {
-  return docCoThe<StorefrontProduct>(`/public/products/${slug}`);
+/** Trả về null khi không có sản phẩm, để trang gọi notFound() */
+export async function laySanPham(slug: string): Promise<StorefrontProduct | null> {
+  const tho = await docCoThe<unknown>(`/public/products/${slug}`);
+  return tho === null ? null : chuanHoaSanPham(tho);
+}
+
+/**
+ * Danh sách sản phẩm có thể lỗi mạng giữa chừng. Trang danh sách thà hiện
+ * "không tìm thấy sản phẩm nào" còn hơn trắng màn hình.
+ */
+export async function timSanPhamAnToan(
+  thamSo: Record<string, string | number | undefined>,
+): Promise<DanhSachSanPham> {
+  try {
+    return await timSanPham(thamSo);
+  } catch (error) {
+    console.error('[web] Không lấy được danh sách sản phẩm:', error);
+    return { items: [], total: 0, page: 1, pageSize: 24, appliedFilters: {} };
+  }
 }
 
 /**
@@ -171,6 +251,196 @@ export async function layDuLieuChung(): Promise<DuLieuChung> {
     console.error('[web] Không lấy được dữ liệu chung, dùng bản dự phòng:', error);
     return CHUNG_DU_PHONG;
   }
+}
+
+/* ======================= Bài viết ======================= */
+
+function chuanHoaBaiViet(tho: unknown): StorefrontPost | null {
+  const goc = (tho ?? {}) as Record<string, unknown>;
+  if (typeof goc.slug !== 'string' || typeof goc.title !== 'string') return null;
+  return {
+    slug: goc.slug,
+    title: goc.title,
+    excerpt: chuoiHoacNull(goc.excerpt),
+    coverUrl: chuoiHoacNull(goc.coverUrl),
+    categoryName: chuoiHoacNull(goc.categoryName),
+    categorySlug: chuoiHoacNull(goc.categorySlug),
+    publishedAt: chuoiHoacNull(goc.publishedAt),
+  };
+}
+
+/** Lỗi thì trả danh sách rỗng, trang hiện "chưa có bài" chứ không trắng màn hình */
+export async function layDanhSachBaiViet(
+  thamSo: Record<string, string | number | undefined> = {},
+): Promise<StorefrontPostList> {
+  const query = new URLSearchParams();
+  for (const [khoa, giaTri] of Object.entries(thamSo)) {
+    if (giaTri !== undefined && giaTri !== '') query.set(khoa, String(giaTri));
+  }
+  const chuoi = query.toString();
+
+  try {
+    const goc = (await doc<unknown>(`/public/posts${chuoi ? `?${chuoi}` : ''}`, 300)) as Record<
+      string,
+      unknown
+    >;
+    return {
+      items: mang<unknown>(goc?.items)
+        .map(chuanHoaBaiViet)
+        .filter((item): item is StorefrontPost => item !== null),
+      total: so(goc?.total),
+      page: so(goc?.page, 1),
+      pageSize: so(goc?.pageSize, 12),
+      categories: mang(goc?.categories),
+    };
+  } catch (error) {
+    console.error('[web] Không lấy được danh sách bài viết:', error);
+    return { items: [], total: 0, page: 1, pageSize: 12, categories: [] };
+  }
+}
+
+export async function layBaiViet(slug: string): Promise<StorefrontPostDetail | null> {
+  const tho = await docCoThe<unknown>(`/public/posts/${slug}`, 300);
+  if (tho === null) return null;
+
+  const coBan = chuanHoaBaiViet(tho);
+  if (!coBan) return null;
+
+  const goc = tho as Record<string, unknown>;
+  return {
+    ...coBan,
+    contentHtml: typeof goc.contentHtml === 'string' ? goc.contentHtml : '',
+    seoTitle: chuoiHoacNull(goc.seoTitle),
+    seoDescription: chuoiHoacNull(goc.seoDescription),
+    authorName: chuoiHoacNull(goc.authorName),
+    products: mang(goc.products),
+    related: mang<unknown>(goc.related)
+      .map(chuanHoaBaiViet)
+      .filter((item): item is StorefrontPost => item !== null),
+  };
+}
+
+/* ======================= Chính sách ======================= */
+
+function chuanHoaChinhSach(tho: unknown): StorefrontPolicyDetail | null {
+  const goc = (tho ?? {}) as Record<string, unknown>;
+  if (typeof goc.slug !== 'string') return null;
+  return {
+    slug: goc.slug,
+    label: typeof goc.label === 'string' ? goc.label : '',
+    title: typeof goc.title === 'string' ? goc.title : '',
+    version: typeof goc.version === 'string' ? goc.version : '',
+    effectiveAt: typeof goc.effectiveAt === 'string' ? goc.effectiveAt : '',
+    contentHtml: typeof goc.contentHtml === 'string' ? goc.contentHtml : '',
+  };
+}
+
+/**
+ * Danh sách chính sách đang có hiệu lực.
+ *
+ * Lỗi thì trả mảng rỗng chứ không ném: hàm này được chân trang gọi ở MỌI trang,
+ * API chết mà ném lỗi là trắng cả website chỉ vì mất mấy cái liên kết ở cuối trang.
+ *
+ * Để 1800 giây (30 phút): chính sách hiếm khi đổi, không việc gì phải hỏi lại
+ * API mỗi phút trên mọi trang.
+ */
+export async function layDanhSachChinhSach(): Promise<StorefrontPolicy[]> {
+  try {
+    return mang<StorefrontPolicy>(await doc<unknown>('/public/policies', 1800));
+  } catch (error) {
+    console.error('[web] Không lấy được danh sách chính sách:', error);
+    return [];
+  }
+}
+
+export async function layChinhSach(slug: string): Promise<StorefrontPolicyDetail | null> {
+  const tho = await docCoThe<unknown>(`/public/policies/${slug}`, 1800);
+  return tho === null ? null : chuanHoaChinhSach(tho);
+}
+
+/* ======================= Showroom ======================= */
+
+function chuanHoaShowroom(tho: unknown): StorefrontShowroomDetail | null {
+  const goc = (tho ?? {}) as Record<string, unknown>;
+  if (typeof goc.slug !== 'string' || typeof goc.name !== 'string') return null;
+
+  return {
+    slug: goc.slug,
+    name: goc.name,
+    address: typeof goc.address === 'string' ? goc.address : '',
+    phone: chuoiHoacNull(goc.phone),
+    openingHours: mang<string>(goc.openingHours),
+    imageUrl: chuoiHoacNull(goc.imageUrl),
+    directionsUrl: chuoiHoacNull(goc.directionsUrl),
+    region: goc.region === 'HN' ? 'HN' : 'HCM',
+    description: chuoiHoacNull(goc.description),
+    email: chuoiHoacNull(goc.email),
+    images: mang<string>(goc.images),
+    mapEmbedUrl: chuoiHoacNull(goc.mapEmbedUrl),
+  };
+}
+
+/** Danh sách showroom. Lỗi thì trả mảng rỗng, trang tự ẩn khối đi. */
+export async function layDanhSachShowroom(): Promise<StorefrontShowroom[]> {
+  try {
+    return mang<StorefrontShowroom>(await doc<unknown>('/public/showrooms', 300));
+  } catch (error) {
+    console.error('[web] Không lấy được danh sách showroom:', error);
+    return [];
+  }
+}
+
+export async function layShowroom(slug: string): Promise<StorefrontShowroomDetail | null> {
+  const tho = await docCoThe<unknown>(`/public/showrooms/${slug}`, 300);
+  return tho === null ? null : chuanHoaShowroom(tho);
+}
+
+/* ======================= Ảnh nhiều cỡ ======================= */
+
+/**
+ * Máy chủ tạo sẵn ba cỡ cho mỗi ảnh: 400px (_sm), 900px (_md) và 1600px (bản gốc).
+ * Trước đây tôi dùng bản gốc ở MỌI chỗ — kể cả thẻ sản phẩm rộng 170px trên
+ * điện thoại. Một trang danh sách 24 sản phẩm là 24 tấm 1600px, phần lớn tải về
+ * rồi thu nhỏ lại, phí băng thông của khách.
+ *
+ * Trả về srcSet để trình duyệt tự chọn cỡ theo bề rộng thật và mật độ màn hình.
+ */
+export function boAnh(url: string): { src: string; srcSet: string } {
+  return {
+    // src là cỡ vừa: trình duyệt quá cũ không hiểu srcSet vẫn không tải bản 1600px
+    src: imageUrl(url, 'md'),
+    srcSet: `${imageUrl(url, 'sm')} 400w, ${imageUrl(url, 'md')} 900w, ${imageUrl(url, 'lg')} 1600w`,
+  };
+}
+
+/** Ảnh nhỏ (ảnh đại diện, ảnh thu nhỏ): không bao giờ cần quá 400px */
+export function anhNho(url: string): string {
+  return imageUrl(url, 'sm');
+}
+
+/** Tên miền thật của website, dùng cho những chỗ BẮT BUỘC có đường dẫn đầy đủ */
+export const DIA_CHI_WEB = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://khoathongminhchinhhang.vn'
+).replace(/\/+$/, '');
+
+/**
+ * Đổi đường dẫn ảnh tương đối thành đường dẫn ĐẦY ĐỦ.
+ *
+ * Database lưu "/media/2026/01/abc.webp" — trình duyệt tự ghép với tên miền đang
+ * mở nên hiện ảnh bình thường. Nhưng có hai chỗ trình duyệt không ghép hộ:
+ *
+ *   - Dữ liệu cấu trúc JSON-LD gửi cho Google: trường "image" là dữ liệu thuần,
+ *     Google đọc "/media/..." thì không biết nó nằm ở tên miền nào và bỏ qua ảnh.
+ *   - Ảnh xem trước khi dán link lên Facebook, Zalo (thẻ og:image).
+ *
+ * Riêng og:image thì Next.js đã tự lo nhờ metadataBase khai ở layout.tsx; hàm này
+ * dành cho JSON-LD và những chỗ mình tự dựng chuỗi.
+ *
+ * Đường dẫn đã đầy đủ sẵn (ảnh để trên CDN) thì giữ nguyên.
+ */
+export function anhTuyetDoi(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${DIA_CHI_WEB}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 /** Giá tiền dạng "12.500.000 ₫" — dùng chung một chỗ để mọi trang hiện giống nhau */

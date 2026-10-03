@@ -102,6 +102,31 @@
     }
 
     /*
+     * <fieldset> KHÔNG được tự nới rộng ra khỏi khung chứa nó.
+     *
+     * Trình duyệt đặt sẵn cho fieldset: min-inline-size: min-content (luật này có từ
+     * thời fieldset dùng để bọc nhóm ô nhập, để không cắt mất nhãn). Nghĩa là fieldset
+     * luôn rộng bằng phần nội dung hẹp nhất có thể của nó. Chỉ cần BÊN TRONG có một
+     * dòng chữ không cho ngắt dòng (class truncate = white-space: nowrap) là fieldset
+     * phình ra bằng cả dòng chữ đó, dù khung chứa chỉ có 340px — và Tailwind preflight
+     * không gỡ luật này.
+     *
+     * Hậu quả đã gặp: trang soạn bài viết, cột phụ bên phải rộng 340px nhưng ô xem
+     * trước Google có dòng "khoathongminhchinhhang.vn/bai-viet/<đường-dẫn-dài>" đặt
+     * truncate → fieldset nở ra 573px → tràn 209px → vùng nội dung sinh thanh cuộn ngang.
+     * Bài MỚI chưa có đường dẫn thì dòng đó ngắn nên KHÔNG tràn: đó là lý do lỗi chỉ
+     * xuất hiện khi mở bài đã lưu.
+     *
+     * Đặt min-inline-size: 0 cho mọi fieldset: fieldset co đúng bằng khung chứa,
+     * chữ dài quay về đúng hành vi mong muốn (truncate thì hiện "…", còn lại thì xuống dòng).
+     * Hiện trong admin có 11 fieldset chưa khai min-w-0 — quy tắc này xử lý hết một lượt
+     * và chặn lỗi tương tự về sau.
+     */
+    fieldset {
+        min-inline-size: 0;
+    }
+
+    /*
      * Dải tab (Tất cả / Nháp / ...) dùng overflow-x-auto để kéo ngang được trên màn hình hẹp.
      * Theo chuẩn CSS, đặt auto cho MỘT trục thì trục còn lại đang "visible" tự thành "auto",
      * nên dải tab cao hơn khung 1px (gạch chân của tab đang chọn) là sinh thanh cuộn dọc thừa.
@@ -155,3 +180,4 @@
         }
     }
 }
+

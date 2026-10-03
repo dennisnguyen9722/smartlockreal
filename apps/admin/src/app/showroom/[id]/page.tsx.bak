@@ -210,7 +210,7 @@ function ShowroomEditor({
                     </fieldset>
 
                     {canManage && dirty && (
-                        <div className="sticky bottom-2 z-20 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/90 px-4 py-3 shadow-lg shadow-black/10 backdrop-blur-md">
+                        <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t bg-background py-3">
                             <span className="mr-auto text-sm text-muted-foreground">Có thay đổi chưa lưu</span>
                             <Button
                                 variant="outline"

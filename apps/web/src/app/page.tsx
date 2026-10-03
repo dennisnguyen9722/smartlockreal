@@ -4,6 +4,7 @@ import type { StorefrontHome } from '@ktm/shared';
 import { layTrangChu, soGoi, dinhDangDienThoai } from '@/lib/api';
 import { BannerSlider } from '@/components/banner-slider';
 import { ProductCard } from '@/components/product-card';
+import { LogoHang } from '@/components/logo-hang';
 import {
     BangKhuyenMai,
     CamKet,
@@ -23,7 +24,11 @@ import {
  * Thứ tự các khối đi theo đúng đường một người đi tới chỗ quyết định mua:
  *   thấy hàng (banner) → tôi mua cho cửa nào → xem mẫu → (nhà thầu rẽ nhánh ở đây)
  *   → khuyến mãi → sờ tận tay ở showroom → người khác mua thấy sao
- *   → đọc thêm cho chắc → thắc mắc còn lại → gọi.
+ *   → xem hết hàng theo hãng → đọc thêm cho chắc → thắc mắc còn lại → gọi.
+ *
+ * Khối bài viết nằm SAU toàn bộ phần hàng hóa: khách vào trang chủ là để xem khóa,
+ * chặn một dải bài đọc vào giữa đường là đẩy mấy dải sản phẩm xuống dưới tầm mắt.
+ * Ai muốn đọc thì vẫn còn mục "Bài viết" trên thanh menu.
  *
  * Mỗi khối tự ẩn khi chưa có dữ liệu, nên trang không bao giờ hiện ô trống.
  */
@@ -72,7 +77,7 @@ export default async function HomePage() {
 
             {/* ===================== Màn hình đầu ===================== */}
             <section className="nen-sang-mo relative overflow-hidden">
-                <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-24">
+                <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-16 lg:py-24">
                     <p className="text-xs font-semibold tracking-[0.22em] text-[var(--kt-gold-soft)] uppercase">
                         Nhà phân phối chính hãng
                     </p>
@@ -158,7 +163,7 @@ export default async function HomePage() {
 
             {/* ===================== Chọn theo loại cửa ===================== */}
             {home.doorTypes.length > 0 && (
-                <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+                <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
                     <TieuDeKhoi
                         nhan="Bắt đầu từ đây"
                         tieuDe="Nhà bạn đang dùng cửa gì?"
@@ -169,7 +174,7 @@ export default async function HomePage() {
                         {home.doorTypes.map((loai) => (
                             <li key={loai.slug}>
                                 <Link
-                                    href={`/khoa-${loai.slug}`}
+                                    href={`/khoa/${loai.slug}`}
                                     className="kinh group flex h-full flex-col rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1"
                                 >
                                     <span className="so-lieu text-xs font-semibold tracking-[0.18em] text-[var(--kt-gold-soft)] uppercase">
@@ -197,7 +202,7 @@ export default async function HomePage() {
             {/* ===================== Sản phẩm nổi bật ===================== */}
             {home.featured.length > 0 && (
                 <section className="nen-sang-mo border-y border-white/10">
-                    <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+                    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
                         <div className="flex flex-wrap items-end justify-between gap-4">
                             <TieuDeKhoi
                                 nhan="Mới về"
@@ -236,27 +241,37 @@ export default async function HomePage() {
                 diemTrungBinh={home.totals.ratingAverage}
             />
 
-            <KhoiBaiViet posts={home.posts} />
-
             {/* ===================== Thương hiệu ===================== */}
             {home.brands.length > 0 && (
-                <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-20">
+                <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:py-20">
                     <TieuDeKhoi
                         nhan="Phân phối chính hãng"
                         tieuDe="Thương hiệu đang có"
                         mo="Bấm vào một hãng để nhảy xuống dải sản phẩm của hãng đó."
                     />
 
-                    <ul className="mt-10 flex flex-wrap gap-3">
+                    {/*
+                      Điện thoại: xếp HAI CỘT. Bản cũ dùng flex-wrap nên mỗi ô rộng
+                      bằng nội dung của nó (~200px), màn hình 364px không nhét nổi
+                      hai ô — thành ra mỗi hãng một hàng, 5 hãng là 5 hàng, kéo dài
+                      lê thê mà chẳng chứa thêm thông tin gì.
+                      Máy tính vẫn flex-wrap như cũ, ở đó xếp hàng ngang mới đẹp.
+                    */}
+                    <ul className="mt-7 grid grid-cols-2 gap-2.5 sm:mt-9 sm:flex sm:flex-wrap sm:gap-3">
                         {home.brands.map((hang) => (
                             <li key={hang.slug}>
                                 <a
                                     href={`#hang-${hang.slug}`}
-                                    className="kinh flex items-baseline gap-2 rounded-2xl px-5 py-3 transition-all hover:-translate-y-0.5"
+                                    className="kinh flex h-full items-center gap-2.5 rounded-2xl p-2.5 transition-all hover:-translate-y-0.5 sm:gap-3 sm:p-3 sm:pr-5"
                                 >
-                                    <span className="font-semibold text-white">{hang.name}</span>
-                                    <span className="so-lieu text-xs text-white/50">
-                                        {hang.productCount}
+                                    <LogoHang hang={hang} co="xs" />
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-sm font-semibold text-white sm:text-base">
+                                            {hang.name}
+                                        </span>
+                                        <span className="so-lieu block text-[11px] text-white/50 sm:text-xs">
+                                            {hang.productCount} mẫu
+                                        </span>
                                     </span>
                                 </a>
                             </li>
@@ -267,12 +282,15 @@ export default async function HomePage() {
 
             <KhoiTheoHang sections={home.byBrand} />
 
+            {/* Bài viết: đặt sau hết phần hàng hóa (nổi bật + theo hãng) */}
+            <KhoiBaiViet posts={home.posts} />
+
             <KhoiCauHoi faqs={home.faqs} />
 
             {/* ===================== Gọi tư vấn ===================== */}
             {soBam && (
                 <section className="border-t border-white/10 bg-[var(--kt-navy)]">
-                    <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 px-4 py-14 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:py-16">
+                    <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 px-4 py-10 sm:px-6 sm:py-14 lg:flex-row lg:items-center lg:justify-between lg:py-16">
                         <div>
                             <h2 className="text-2xl font-bold text-balance sm:text-3xl">
                                 Chưa biết chọn mẫu nào?

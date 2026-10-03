@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Paginated } from './catalog';
 
 /**
  * Hợp đồng dữ liệu giữa API công khai và storefront.
@@ -45,6 +46,14 @@ export interface StorefrontTaxonomy {
   name: string;
   description: string | null;
   productCount: number;
+}
+
+/** Hãng có thêm logo và xuất xứ, loại cửa thì không — nên tách riêng */
+export interface StorefrontBrand extends StorefrontTaxonomy {
+  logoUrl: string | null;
+  countryOfOrigin: string | null;
+  /** Công ty có giấy ủy quyền phân phối chính hãng của hãng này */
+  isAuthorized: boolean;
 }
 
 export interface StorefrontCard {
@@ -113,6 +122,15 @@ export interface StorefrontShowroom {
   region: 'HCM' | 'HN';
 }
 
+/** Trang chi tiết showroom cần nhiều hơn danh sách: ảnh, bản đồ, giới thiệu */
+export interface StorefrontShowroomDetail extends StorefrontShowroom {
+  description: string | null;
+  email: string | null;
+  images: string[];
+  /** Bản đồ nhúng, không cần khóa API; null khi chưa nhập tọa độ */
+  mapEmbedUrl: string | null;
+}
+
 export interface StorefrontReview {
   reviewerName: string;
   rating: number;
@@ -130,8 +148,39 @@ export interface StorefrontPost {
   excerpt: string | null;
   coverUrl: string | null;
   categoryName: string | null;
+  categorySlug: string | null;
   publishedAt: string | null;
 }
+
+export interface StorefrontPostCategory {
+  slug: string;
+  name: string;
+  postCount: number;
+}
+
+export interface StorefrontPostList extends Paginated<StorefrontPost> {
+  /** Gửi kèm luôn để trang danh sách dựng được bộ lọc chỉ bằng một lần gọi */
+  categories: StorefrontPostCategory[];
+}
+
+export interface StorefrontPostDetail extends StorefrontPost {
+  /** HTML đã được trang quản trị lọc sạch trước khi lưu */
+  contentHtml: string;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  authorName: string | null;
+  /** Sản phẩm bài viết nhắc tới — đường đi từ bài đọc sang trang mua */
+  products: StorefrontCard[];
+  /** Bài khác cùng chuyên mục */
+  related: StorefrontPost[];
+}
+
+export const StorefrontPostListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(24).default(12),
+  category: SlugParam.optional(),
+});
+export type StorefrontPostListQuery = z.infer<typeof StorefrontPostListQuerySchema>;
 
 export interface StorefrontFaq {
   question: string;
@@ -147,13 +196,13 @@ export interface StorefrontBanner {
 }
 
 export interface StorefrontBrandSection {
-  brand: StorefrontTaxonomy;
+  brand: StorefrontBrand;
   products: StorefrontCard[];
 }
 
 export interface StorefrontHome {
   doorTypes: StorefrontTaxonomy[];
-  brands: StorefrontTaxonomy[];
+  brands: StorefrontBrand[];
   /** Banner lớn đầu trang (HOME_HERO) */
   banners: StorefrontBanner[];
   /** Banner khuyến mãi giữa trang (HOME_SECONDARY) */
@@ -185,3 +234,30 @@ export interface StorefrontHome {
 }
 
 
+
+/* ============================= Chính sách ============================= */
+
+/**
+ * Chính sách hiện trên website.
+ *
+ * Mỗi lần sửa trong trang quản trị là một PHIÊN BẢN mới, bản cũ giữ nguyên để
+ * đối chiếu với những gì khách đã đồng ý lúc đặt hàng. Website chỉ hiện BẢN
+ * ĐANG CÓ HIỆU LỰC: bản có ngày hiệu lực mới nhất nhưng không nằm ở tương lai.
+ * Bản hẹn ngày (ví dụ "từ 01/11 áp dụng chính sách đổi trả mới") chưa tới ngày
+ * thì khách chưa thấy.
+ */
+export interface StorefrontPolicy {
+  /** Đường dẫn trên website, ví dụ "bao-hanh" (xem POLICY_INFO trong content.ts) */
+  slug: string;
+  /** Tên chuẩn của loại chính sách, ví dụ "Chính sách bảo hành" */
+  label: string;
+  /** Tiêu đề do người soạn đặt cho phiên bản này */
+  title: string;
+  version: string;
+  effectiveAt: string;
+}
+
+export interface StorefrontPolicyDetail extends StorefrontPolicy {
+  /** Đã lọc sạch ở API trước khi lưu, đổ thẳng ra được */
+  contentHtml: string;
+}

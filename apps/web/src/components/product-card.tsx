@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { StorefrontCard } from '@ktm/shared';
-import { dinhDangGiaTu, dinhDangTien } from '@/lib/api';
+import { boAnh, dinhDangGiaTu, dinhDangTien } from '@/lib/api';
 
 /**
  * Thẻ sản phẩm kiểu "kính".
@@ -41,7 +41,10 @@ export function ProductCard({ sanPham, uuTienAnh = false }: Props) {
                     // <img> thường chứ không phải next/image: ảnh nằm trên máy chủ lưu trữ riêng,
                     // dùng next/image sẽ phải khai báo remotePatterns và tốn thêm một vòng xử lý ảnh.
                     <img
-                        src={sanPham.imageUrl}
+                        {...boAnh(sanPham.imageUrl)}
+                        // Thẻ chiếm nửa bề ngang trên điện thoại, 1/4 trên máy tính.
+                        // Có sizes thì trình duyệt mới chọn đúng cỡ trong srcSet.
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 320px"
                         alt={sanPham.name}
                         loading={uuTienAnh ? 'eager' : 'lazy'}
                         fetchPriority={uuTienAnh ? 'high' : 'auto'}

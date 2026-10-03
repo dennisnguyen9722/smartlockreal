@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ErrorCode,
   StorefrontListQuerySchema,
+  StorefrontPostListQuerySchema,
   StorefrontSlugSchema,
 } from '@ktm/shared';
 import { Public } from '../auth/auth.decorators';
@@ -43,6 +44,46 @@ export class StorefrontController {
   }
 
   @Public()
+  @Get('posts')
+  posts(@Query() query: unknown) {
+    return this.storefront.listPosts(parse(StorefrontPostListQuerySchema, query));
+  }
+
+  @Public()
+  @Get('posts/:slug')
+  post(@Param() params: unknown) {
+    const { slug } = parse(StorefrontSlugSchema, params);
+    return this.storefront.getPost(slug);
+  }
+
+  /** Chính sách đang có hiệu lực — chân trang lấy danh sách này để dựng liên kết */
+  @Public()
+  @Get('policies')
+  policies() {
+    return this.storefront.listPolicies();
+  }
+
+  @Public()
+  @Get('policies/:slug')
+  policy(@Param() params: unknown) {
+    const { slug } = parse(StorefrontSlugSchema, params);
+    return this.storefront.getPolicy(slug);
+  }
+
+  @Public()
+  @Get('showrooms')
+  showrooms() {
+    return this.storefront.listShowrooms();
+  }
+
+  @Public()
+  @Get('showrooms/:slug')
+  showroom(@Param() params: unknown) {
+    const { slug } = parse(StorefrontSlugSchema, params);
+    return this.storefront.getShowroom(slug);
+  }
+
+  @Public()
   @Get('products')
   products(@Query() query: unknown) {
     return this.storefront.listProducts(parse(StorefrontListQuerySchema, query));
@@ -55,3 +96,5 @@ export class StorefrontController {
     return this.storefront.getProduct(slug);
   }
 }
+
+

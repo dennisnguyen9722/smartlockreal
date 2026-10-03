@@ -363,7 +363,13 @@ export function PostEditor({ post, onReload }: { post?: PostDetail; onReload?: (
                         </CardContent>
                     </Card>
 
-                    <fieldset disabled={!canManage || busy} className="space-y-4">
+                    {/*
+                      * min-w-0 là BẮT BUỘC: fieldset mặc định có min-inline-size: min-content,
+                      * nên dòng xem trước Google (truncate, không ngắt dòng) sẽ nới fieldset
+                      * rộng hơn cột 340px và sinh cuộn ngang. globals.css đã khóa chung cho
+                      * mọi fieldset; giữ class ở đây để ai sửa file này sau còn thấy lý do.
+                      */}
+                    <fieldset disabled={!canManage || busy} className="min-w-0 space-y-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle>Ảnh bìa</CardTitle>
@@ -460,3 +466,4 @@ export function PostEditor({ post, onReload }: { post?: PostDetail; onReload?: (
         </>
     );
 }
+

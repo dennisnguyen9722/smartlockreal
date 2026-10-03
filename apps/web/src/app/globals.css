@@ -137,23 +137,132 @@ html {
  * chữ phía dưới trông như chú thích rời chứ không phải một khối liền với ảnh.
  * Vẫn không dùng backdrop-filter — một trang có hàng chục thẻ.
  */
+/*
+ * Thẻ sản phẩm phải NỔI KHỐI ngay cả khi không rê chuột.
+ *
+ * Bản cũ đổ bóng màu rgba(0, 8, 24, .55) — gần như trùng màu nền navy của trang,
+ * nên trên màn hình thực tế không ai thấy cái bóng đó. Thẻ nằm bẹt vào nền.
+ *
+ * Trên giao diện NỀN TỐI, cảm giác nổi khối không đến từ bóng mờ như trên nền
+ * sáng, mà đến từ ba thứ cùng lúc:
+ *   1. Mặt thẻ SÁNG HƠN nền rõ rệt (nâng dải trắng mờ từ .14 lên .18)
+ *   2. Vệt sáng mép TRÊN + vệt tối mép DƯỚI  -> mắt đọc ra độ dày của khối
+ *   3. Bóng đen THẬT, nhiều lớp:
+ *        lớp sát (0 1px 2px)  = chỗ tiếp xúc, cho biết thẻ có đáy
+ *        lớp gần (0 10px 20px) = nâng thẻ lên khỏi mặt phẳng
+ *        lớp xa  (0 28px 50px) = tán rộng, tạo chiều sâu
+ *      Dùng rgba(0,0,0,...) chứ không dùng màu navy: phải ĐEN HƠN nền mới thấy.
+ */
 .the-sp {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+    border: 1px solid rgba(255, 255, 255, 0.22);
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-        0 18px 40px rgba(0, 8, 24, 0.55);
+        inset 0 1px 0 rgba(255, 255, 255, 0.34),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 1px 2px rgba(0, 0, 0, 0.55),
+        0 10px 20px -6px rgba(0, 0, 0, 0.6),
+        0 28px 50px -12px rgba(0, 0, 0, 0.7);
 }
 
 /* Di chuột: viền ngả vàng thương hiệu, bóng sâu thêm */
+/* Rê chuột: nâng cao thêm một bậc nữa, giữ nguyên cấu trúc bóng nhiều lớp */
 .the-sp:hover {
     border-color: rgba(232, 199, 107, 0.5);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.45),
-        0 28px 64px rgba(0, 8, 24, 0.7);
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 1px 2px rgba(0, 0, 0, 0.55),
+        0 16px 28px -8px rgba(0, 0, 0, 0.65),
+        0 40px 70px -16px rgba(0, 0, 0, 0.78);
 }
 
 /* Vạch ngăn giữa ảnh trắng và phần chữ tối, để hai mảng không dính vào nhau */
 .the-sp .vung-anh {
     border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/*
+ * Nội dung bài viết do trình soạn thảo trong trang quản trị sinh ra.
+ * Khác .noi-dung-html (dùng cho câu trả lời FAQ ngắn): bài viết có tiêu đề phụ,
+ * ảnh chèn giữa bài, trích dẫn và danh sách, nên cần khoảng cách rộng hơn và
+ * cỡ chữ lớn hơn cho dễ đọc một mạch.
+ */
+.bai-viet-html {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.bai-viet-html > * + * {
+    margin-top: 1.1rem;
+}
+
+.bai-viet-html h2 {
+    margin-top: 2.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    text-wrap: balance;
+}
+
+.bai-viet-html h3 {
+    margin-top: 2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.bai-viet-html ul,
+.bai-viet-html ol {
+    padding-left: 1.4rem;
+    list-style: revert;
+}
+
+.bai-viet-html li + li {
+    margin-top: 0.4rem;
+}
+
+.bai-viet-html a {
+    color: var(--kt-gold-soft);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.bai-viet-html strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.bai-viet-html img {
+    border-radius: 1.25rem;
+    /* Ảnh trong bài do người soạn chèn, không biết trước kích thước */
+    height: auto;
+    max-width: 100%;
+}
+
+.bai-viet-html blockquote {
+    border-left: 3px solid var(--kt-gold);
+    padding-left: 1.1rem;
+    color: rgba(255, 255, 255, 0.65);
+    font-style: italic;
+}
+
+.bai-viet-html table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bai-viet-html th,
+.bai-viet-html td {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 0.6rem 0.9rem;
+    text-align: left;
+}
+
+.bai-viet-html th {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-weight: 600;
 }

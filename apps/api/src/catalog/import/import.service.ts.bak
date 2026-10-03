@@ -107,60 +107,6 @@ function resolveRef(raw: string, lookup: RefLookup): { id: string | null; ambigu
   return { id: null, ambiguous: false };
 }
 
-/**
- * Tên hiển thị cho NHÓM tùy chọn.
- *
- * File Excel chỉ mang mã nhóm ("mau"), không mang tên. Trước đây lấy luôn mã làm
- * tên nên website hiện chữ "mau" trên đầu hàng nút chọn màu.
- *
- * Bảng tra này có bản sao ở packages/database/scripts/sua-ten-tuy-chon.mjs
- * (script sửa những sản phẩm đã lỡ nhập). Sửa bên này nhớ sửa bên kia.
- */
-const TEN_NHOM_TUY_CHON: Record<string, string> = {
-  mau: 'Màu sắc',
-  'mau-sac': 'Màu sắc',
-  color: 'Màu sắc',
-  app: 'Ứng dụng',
-  'ung-dung': 'Ứng dụng',
-  'ket-noi': 'Kết nối',
-  kieu: 'Kiểu mở',
-  'kieu-mo': 'Kiểu mở',
-  'kieu-khoa': 'Kiểu khóa',
-  loai: 'Loại',
-  'loai-khoa': 'Loại khóa',
-  size: 'Kích thước',
-  'kich-thuoc': 'Kích thước',
-  'kich-co': 'Kích cỡ',
-  'chat-lieu': 'Chất liệu',
-  'vat-lieu': 'Vật liệu',
-  'phien-ban': 'Phiên bản',
-  version: 'Phiên bản',
-  'tay-nam': 'Tay nắm',
-  'tay-cam': 'Tay cầm',
-  the: 'Thẻ từ',
-  'the-tu': 'Thẻ từ',
-  'do-day': 'Độ dày',
-  'chieu-day': 'Độ dày',
-  huong: 'Chiều mở',
-  'chieu-mo': 'Chiều mở',
-  remote: 'Điều khiển từ xa',
-  'dieu-khien': 'Điều khiển',
-  camera: 'Camera',
-  pin: 'Nguồn điện',
-  'van-tay': 'Vân tay',
-  'man-hinh': 'Màn hình',
-};
-
-function tenTuyChon(ma: string): string {
-  const biet = TEN_NHOM_TUY_CHON[ma];
-  if (biet) return biet;
-  // Mã lạ: "chat-lieu-dac-biet" -> "Chat lieu dac biet". Không tự thêm dấu tiếng
-  // Việt vì đoán sai thì tên sai hiện thẳng lên website; nhân viên sửa lại trong
-  // trang quản trị là xong.
-  const chu = ma.replace(/-+/g, ' ').trim();
-  return chu ? chu.charAt(0).toUpperCase() + chu.slice(1) : ma;
-}
-
 @Injectable()
 export class ImportService {
   constructor(
@@ -341,7 +287,7 @@ export class ImportService {
 
         for (const [optionCode, valueCode] of Object.entries(parsed.values)) {
           const label = parsed.labels[`${optionCode}:${valueCode}`] ?? valueCode;
-          const option = optionMap.get(optionCode) ?? { name: tenTuyChon(optionCode), values: new Map() };
+          const option = optionMap.get(optionCode) ?? { name: optionCode, values: new Map() };
           option.values.set(valueCode, label);
           optionMap.set(optionCode, option);
 

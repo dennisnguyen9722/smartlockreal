@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@ktm/ui/components/car
 import { Input } from '@ktm/ui/components/input';
 import { Label } from '@ktm/ui/components/label';
 import { HighlightEditor } from '@/components/highlight-editor';
+import { RichTextEditor } from '@/components/post/rich-text-editor';
 import { SlugField } from '@/components/slug-field';
 import { SpecInputs, type SpecShape } from '@/components/spec-inputs';
 import { useApiQuery } from '@/lib/hooks';
@@ -42,6 +43,8 @@ export function ProductInfoForm({
     errors,
     currentBrand,
     currentCategory,
+    disabled,
+    onDescriptionNormalized,
 }: {
     mode: 'create' | 'edit';
     value: ProductInfoDraft;
@@ -50,6 +53,18 @@ export function ProductInfoForm({
     /** Hãng đang gắn (có thể đã bị tắt nên không có trong danh sách chọn) */
     currentBrand?: { id: string; name: string; isActive: boolean } | null;
     currentCategory?: { id: string; name: string; isActive: boolean } | null;
+    /*
+     * Khóa trình soạn thảo khi không có quyền sửa hoặc đang lưu.
+     * Phải truyền riêng: <fieldset disabled> khóa được thẻ input nhưng KHÔNG khóa
+     * được nội dung bên trong iframe của TinyMCE.
+     */
+    disabled?: boolean;
+    /*
+     * TinyMCE sắp xếp lại HTML ngay khi mở (ví dụ văn bản thường thành "<p>...</p>").
+     * Gọi lại để trang cha lấy bản đó làm mốc, nếu không mọi sản phẩm vừa mở ra đã
+     * bị báo "có thay đổi chưa lưu" dù chưa gõ gì.
+     */
+    onDescriptionNormalized?: (html: string) => void;
 }) {
     const set = <K extends keyof ProductInfoDraft>(key: K, next: ProductInfoDraft[K]) =>
         onChange((current) => ({ ...current, [key]: next }));
@@ -242,15 +257,23 @@ export function ProductInfoForm({
                         />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="min-w-0 space-y-1.5">
                         <Label>Mô tả chi tiết</Label>
-                        <textarea
+                        <RichTextEditor
                             value={value.description}
-                            onChange={(event) => set('description', event.target.value)}
-                            rows={8}
-                            placeholder="Giới thiệu đầy đủ, hiển thị ở trang sản phẩm"
-                            className={TEXTAREA_CLASS}
+                            onChange={(html) => set('description', html)}
+                            onReady={onDescriptionNormalized}
+                            disabled={disabled}
+                            invalid={Boolean(errors.description)}
                         />
+                        {errors.description ? (
+                            <p className="text-xs text-destructive">{errors.description}</p>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                Hiện ở trang sản phẩm trên website. Dùng tiêu đề, gạch đầu dòng và bảng
+                                thông số cho dễ đọc; ảnh chèn vào đây được tải lên Thư viện ảnh.
+                            </p>
+                        )}
                     </div>
                 </CardContent>
             </Card>
@@ -340,3 +363,4 @@ export function ProductInfoForm({
         </div>
     );
 }
+

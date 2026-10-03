@@ -33,7 +33,27 @@ const EnvSchema = z
     JWT_STAFF_REFRESH_SECRET: jwtSecret,
 
     MEDIA_ROOT: z.string().min(1).default('./var/media'),
-    MEDIA_PUBLIC_URL: z.string().regex(/^https?:\/\//, 'phải bắt đầu bằng http:// hoặc https://'),
+    /*
+     * Tiền tố đứng trước mọi đường dẫn ảnh LƯU VÀO DATABASE.
+     *
+     * Mặc định "/media" — đường dẫn TƯƠNG ĐỐI, và nên để nguyên như vậy.
+     * Trình duyệt tự ghép với tên miền nó đang mở, nên cùng một bản ghi chạy đúng
+     * ở localhost, ở địa chỉ wifi nội bộ (xem bằng điện thoại) và ở tên miền thật,
+     * không phải sửa database mỗi lần đổi chỗ chạy.
+     *
+     * Chỉ điền đường dẫn đầy đủ khi ảnh nằm ở MÁY CHỦ KHÁC, ví dụ đẩy lên CDN:
+     *   MEDIA_PUBLIC_URL=https://cdn.khoathongminhchinhhang.vn/media
+     *
+     * Dùng "/media" thì web (cổng 3000) và admin (cổng 3001) phải chuyển tiếp
+     * /media/... về API — đã khai trong next.config.ts của hai app đó.
+     */
+    MEDIA_PUBLIC_URL: z
+      .string()
+      .regex(
+        /^(\/[^\s]*|https?:\/\/[^\s]+)$/,
+        'phải là đường dẫn bắt đầu bằng / (vd /media) hoặc địa chỉ đầy đủ http(s)://',
+      )
+      .default('/media'),
     MEDIA_MAX_SIZE_MB: z.coerce.number().int().min(1).max(50).default(10),
     
   })
@@ -75,3 +95,4 @@ export function loadEnv(): Env {
   }
   return result.data;
 }
+

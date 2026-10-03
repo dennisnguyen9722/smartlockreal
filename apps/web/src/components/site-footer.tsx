@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import type { StorefrontHome, StorefrontTaxonomy } from '@ktm/shared';
-import { dinhDangDienThoai, soGoi } from '@/lib/api';
+import { dinhDangDienThoai, layDanhSachChinhSach, soGoi } from '@/lib/api';
 
 /**
  * Chân trang. Thuần máy chủ (không 'use client') nên không tốn JavaScript gửi về máy khách.
  * Thông tin công ty lấy từ cấu hình trong trang quản trị, không viết cứng ở đây —
  * sửa số điện thoại trong admin là cả website đổi theo.
+ *
+ * Danh sách chính sách tự lấy ở đây chứ không nhận qua props: Next.js gộp các lần
+ * gọi trùng nhau trong cùng một lượt dựng trang, nên không tốn thêm lần gọi API,
+ * mà layout.tsx thì khỏi phải sửa.
  */
 
 interface Props {
@@ -13,7 +17,8 @@ interface Props {
     congTy: StorefrontHome['company'];
 }
 
-export function SiteFooter({ loaiCua, congTy }: Props) {
+export async function SiteFooter({ loaiCua, congTy }: Props) {
+    const chinhSach = await layDanhSachChinhSach();
     const soBam = congTy.hotline ? soGoi(congTy.hotline) : null;
     const soHienThi = congTy.hotline ? dinhDangDienThoai(congTy.hotline) : null;
     const nam = new Date().getFullYear();
@@ -21,7 +26,7 @@ export function SiteFooter({ loaiCua, congTy }: Props) {
     return (
         <footer className="border-t border-white/10 bg-[var(--kt-navy-deep)]">
             <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:py-16">
-                <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr] lg:gap-12">
+                <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] lg:gap-12">
                     <div>
                         {/*
                           Dùng biểu tượng + chữ thay cho logo đầy đủ: logo đầy đủ có dòng
@@ -77,7 +82,7 @@ export function SiteFooter({ loaiCua, congTy }: Props) {
                             {loaiCua.map((muc) => (
                                 <li key={muc.slug}>
                                     <Link
-                                        href={`/khoa-${muc.slug}`}
+                                        href={`/khoa/${muc.slug}`}
                                         className="text-sm text-white/70 transition-colors hover:text-white"
                                     >
                                         Khóa {muc.name.toLowerCase()}
@@ -126,18 +131,63 @@ export function SiteFooter({ loaiCua, congTy }: Props) {
                                 </Link>
                             </li>
                             <li>
+                                <Link href="/showroom" className="hover:text-white">
+                                    Showroom
+                                </Link>
+                            </li>
+                            <li>
+                                <Link href="/bai-viet" className="hover:text-white">
+                                    Kinh nghiệm chọn khóa
+                                </Link>
+                            </li>
+                            <li>
                                 <Link href="/lien-he" className="hover:text-white">
                                     Liên hệ
                                 </Link>
                             </li>
                         </ul>
                     </div>
+
+                    {/*
+                      Chính sách: cột riêng vì đây là chỗ khách quen tìm, và cũng là
+                      chỗ Google kiểm khi xét website bán hàng có đáng tin không.
+                      Chưa soạn bản nào thì khối tự ẩn, không để lại cột trống.
+                    */}
+                    {chinhSach.length > 0 && (
+                        <div>
+                            <h2 className="text-xs font-semibold tracking-[0.18em] text-[var(--kt-gold-soft)] uppercase">
+                                Chính sách
+                            </h2>
+                            <ul className="mt-4 space-y-2.5 text-sm text-white/70">
+                                {chinhSach.map((muc) => (
+                                    <li key={muc.slug}>
+                                        <Link href={`/chinh-sach/${muc.slug}`} className="hover:text-white">
+                                            {muc.label}
+                                        </Link>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
 
                 <p className="mt-12 border-t border-white/10 pt-6 text-xs text-white/45">
                     © {nam} {congTy.name ?? 'Khóa Thông Minh Chính Hãng'}. Mọi quyền được bảo lưu.
                 </p>
             </div>
+
+            {/*
+             * Chừa chỗ cho thanh điều hướng cố định dưới cùng trên điện thoại.
+             * Thanh đó dùng position: fixed nên nằm ĐÈ lên trang; không chừa chỗ thì
+             * nó che mất mấy dòng cuối chân trang, khách cuộn hết cỡ vẫn không đọc được.
+             * env(safe-area-inset-bottom) là vạch gạt ngang của iPhone không có nút Home.
+             */}
+            <div
+                aria-hidden="true"
+                className="lg:hidden"
+                // Thanh cao 4.25rem + viền + 0.75rem cách mép dưới; thêm chút cho thoáng
+                style={{ height: 'calc(5.75rem + env(safe-area-inset-bottom))' }}
+            />
         </footer>
     );
 }
