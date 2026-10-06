@@ -160,8 +160,29 @@ buoc "3/7  pnpm 10.34.5 trong /opt/node24"
 if [[ -x /opt/node24/bin/pnpm ]] && [[ "$(/opt/node24/bin/pnpm -v 2>/dev/null)" == 10.34.5 ]]; then
     bo "Đã có pnpm 10.34.5"
 else
-    /opt/node24/bin/npm install -g --silent pnpm@10.34.5
-    xong "pnpm $(/opt/node24/bin/pnpm -v)"
+    # --prefix /opt/node24 là BẮT BUỘC.
+    #
+    # Không có nó, npm lấy prefix từ .npmrc của máy (/root/.npmrc, /usr/etc/npmrc).
+    # Trên VPS đang chạy nhiều website, prefix đó thường trỏ vào chỗ cài chung —
+    # nghĩa là lệnh này sẽ GHI ĐÈ pnpm toàn cục mà các app khác đang dùng, mà
+    # /opt/node24/bin/pnpm thì vẫn không có. Đúng thứ cần tránh.
+    #
+    # Bỏ luôn --silent: lỗi cài đặt phải hiện ra, không được nuốt.
+    /opt/node24/bin/npm install -g --prefix /opt/node24 pnpm@10.34.5
+
+    # Kiểm tra lại cho chắc. Bản cũ in thẳng "pnpm $(...)" nên khi lệnh bên
+    # trong hỏng, nó chỉ ra chuỗi rỗng và script vẫn báo ✓ — che mất sự cố.
+    if [[ ! -x /opt/node24/bin/pnpm ]]; then
+        loi "Đã chạy lệnh cài nhưng không thấy /opt/node24/bin/pnpm"
+        loi "Xem npm đang cài vào đâu:  /opt/node24/bin/npm config get prefix"
+        exit 1
+    fi
+    ban_pnpm="$(/opt/node24/bin/pnpm -v)"
+    if [[ $ban_pnpm != 10.34.5 ]]; then
+        loi "Cài ra pnpm $ban_pnpm, không phải 10.34.5"
+        exit 1
+    fi
+    xong "pnpm $ban_pnpm"
 fi
 
 # ---------------------------------------------------------------------------
