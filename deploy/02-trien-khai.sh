@@ -132,8 +132,20 @@ xong "Xong"
 buoc "4/8  Build thư viện dùng chung"
 export NODE_OPTIONS="--max-old-space-size=2048"
 
-pnpm --filter @ktm/database exec prisma generate
-xong "prisma generate"
+# @ktm/database xuất bản dist/ (main: ./dist/index.js, types: ./dist/index.d.ts)
+# nên BẮT BUỘC phải biên dịch, không chỉ sinh Prisma Client.
+#
+# Bản cũ chỉ chạy "prisma generate" — sinh Prisma Client vào src/generated/prisma
+# nhưng không tạo dist/. Trên máy lập trình không lộ ra vì dist/ đã có sẵn từ
+# trước; trên VPS vừa clone về thì API báo:
+#     error TS2307: Cannot find module '@ktm/database'
+# rồi kéo theo hơn 200 lỗi "implicitly has an 'any' type" ăn theo — mất kiểu
+# Prisma thì mọi tham số row/tx/item đều thành any.
+#
+# Lệnh build của chính gói là "prisma generate --no-hints && tsc", bao trọn
+# việc cũ và làm nốt phần còn thiếu.
+pnpm --filter @ktm/database run build
+xong "@ktm/database (prisma generate + tsc)"
 
 pnpm --filter @ktm/shared run build
 xong "@ktm/shared"
