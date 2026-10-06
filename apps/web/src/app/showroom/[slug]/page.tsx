@@ -111,7 +111,10 @@ export default async function TrangShowroomChiTiet({
             <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
                 <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr] lg:gap-14">
                     <div>
-                        {showroom.images.length > 0 && (
+                        {/* Kiểm tra THẲNG images[0], không dùng images.length > 0: TypeScript
+                            thu hẹp được kiểu khi truy cập mảng bằng chỉ số hằng, nhưng
+                            không suy ra được "length > 0 thì phần tử 0 tồn tại". */}
+                        {showroom.images[0] && (
                             <>
                                 <img
                                     {...boAnh(showroom.images[0])}

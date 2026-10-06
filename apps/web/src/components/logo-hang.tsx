@@ -23,9 +23,15 @@ const CO = {
 
 /** "Avo Lock" → "AL", "Hubert" → "HU" */
 function vietTat(ten: string): string {
-    const tu = ten.trim().split(/\s+/);
-    if (tu.length >= 2) return (tu[0][0] + tu[1][0]).toUpperCase();
-    return ten.slice(0, 2).toUpperCase();
+    // filter(Boolean) để chuỗi toàn khoảng trắng không sinh ra phần tử rỗng.
+    const tu = ten.trim().split(/\s+/).filter(Boolean);
+    // noUncheckedIndexedAccess đang bật: tu[0] có kiểu "string | undefined",
+    // nên viết thẳng tu[0][0] là lỗi kiểu. Lấy ra biến rồi kiểm tra mới là sửa
+    // thật — dùng dấu "!" chỉ làm TypeScript im lặng chứ không bớt rủi ro.
+    const dau = tu[0]?.[0];
+    const hai = tu[1]?.[0];
+    if (dau && hai) return (dau + hai).toUpperCase();
+    return ten.trim().slice(0, 2).toUpperCase();
 }
 
 export function LogoHang({

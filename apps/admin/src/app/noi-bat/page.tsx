@@ -149,7 +149,18 @@ export default function TrangNoiBat() {
         if (den < 0 || den >= chon.length) return;
         setChon((truoc) => {
             const sao = [...truoc];
-            [sao[tu], sao[den]] = [sao[den], sao[tu]];
+            // noUncheckedIndexedAccess: sao[den] có kiểu "SanPham | undefined",
+            // gán thẳng vào sao[tu] là lỗi kiểu.
+            //
+            // Tiện thể vá một lỗ thật, không chỉ là chuyện kiểu: hàm này chỉ
+            // kiểm tra "den", không kiểm tra "tu". Gọi với "tu" ngoài khoảng là
+            // ghi undefined vào danh sách và làm hỏng khối sản phẩm nổi bật.
+            // Thiếu phần tử thì trả nguyên mảng cũ, không đổi gì.
+            const a = sao[tu];
+            const b = sao[den];
+            if (!a || !b) return truoc;
+            sao[tu] = b;
+            sao[den] = a;
             return sao;
         });
     }
