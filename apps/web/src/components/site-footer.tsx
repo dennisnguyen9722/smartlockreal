@@ -171,9 +171,61 @@ export async function SiteFooter({ loaiCua, congTy }: Props) {
                     )}
                 </div>
 
-                <p className="mt-12 border-t border-white/10 pt-6 text-xs text-white/45">
-                    © {nam} {congTy.name ?? 'Khóa Thông Minh Chính Hãng'}. Mọi quyền được bảo lưu.
-                </p>
+                <div className="mt-12 border-t border-white/10 pt-6 text-xs text-white/45">
+                    <p>
+                        © {nam} {congTy.name ?? 'Khóa Thông Minh Chính Hãng'}. Mọi quyền được bảo lưu.
+                    </p>
+                    {/*
+                     * DẤU CHÌM — câu này cố ý để NHÌN THẤY ĐƯỢC.
+                     * Google chỉ lập chỉ mục chữ hiển thị, nên gõ nguyên câu này vào
+                     * Google là ra mọi bản sao đã được lập chỉ mục. Giấu chữ đi thì
+                     * Google coi là gian lận và phạt SEO — lợi bất cập hại.
+                     * Câu này cũng chính là lời tuyên bố bản quyền, nên để ở đây là
+                     * đúng chỗ chứ không phải mẹo vặt.
+                     */}
+                    <p className="mt-1.5">
+                        Toàn bộ nội dung, hình ảnh và dữ liệu sản phẩm thuộc bản quyền
+                        của khoathongminhchinhhang.vn.
+                    </p>
+                </div>
+
+                {/*
+                 * LỚP NHẬN DẠNG THỨ HAI, phòng khi dòng bản quyền bên trên bị sửa.
+                 *
+                 * Phải là THUỘC TÍNH trên một phần tử thật, KHÔNG được dùng chú thích
+                 * JSX {/* ... *\/} — chú thích JSX bị xoá lúc biên dịch, không bao giờ
+                 * có mặt trong HTML gửi về trình duyệt, nên vô dụng.
+                 *
+                 * Phần tử rỗng + hidden: không có chữ nào nên Google không coi là giấu
+                 * nội dung, nhưng mã vẫn nằm trong mã nguồn trang và đi theo mọi bản
+                 * sao chép nguyên file.
+                 */}
+                <div hidden data-nguon-goc="KTM-NGUON-GOC-BC5F4E8951E5" />
+
+                {/*
+                 * ĐÈN BÁO SAO CHÉP.
+                 *
+                 * Chạy ở máy khách. Nếu tên miền đang mở KHÔNG phải của mình thì gọi
+                 * một tấm ảnh 1x1 trên máy chủ của mình, kèm theo tên miền lạ đó;
+                 * nginx ghi vào logs/bao-sao-chep.log. Ngược lại thoát ngay, không
+                 * gửi đi đâu một byte nào — KHÔNG theo dõi khách của chính mình.
+                 *
+                 * Dùng ảnh thay vì fetch: không vướng CORS, không cần endpoint mới ở
+                 * NestJS, và chạy được cả trên trình duyệt cũ.
+                 */}
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `(function(){try{
+var h=location.hostname;
+var oke=['khoathongminhchinhhang.vn','www.khoathongminhchinhhang.vn','admin.khoathongminhchinhhang.vn','localhost','127.0.0.1','[::1]'];
+if(oke.indexOf(h)>=0)return;
+if(/^(192\\.168\\.|10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)/.test(h))return;
+new Image().src='https://khoathongminhchinhhang.vn/bao-sao-chep.gif?ten='+encodeURIComponent(h)
++'&duong='+encodeURIComponent(location.pathname.slice(0,120))
++'&tu='+encodeURIComponent((document.referrer||'').slice(0,120));
+}catch(e){}})();`,
+                    }}
+                />
             </div>
 
             {/*
